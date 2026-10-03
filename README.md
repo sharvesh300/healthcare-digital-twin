@@ -23,13 +23,17 @@ CGMacros (real)          Synthea (synthetic)
 
 ## Quick start
 
+Docker runs the infrastructure (TimescaleDB and HAPI FHIR). The pipeline and the
+replay server run on the host with `uv` and connect to them on `localhost`.
+
 ```bash
 cp .env.example .env                      # set PG_PORT etc. if 5432/8080 are taken
-docker compose up -d db fhir              # TimescaleDB + HAPI FHIR (first HAPI boot takes ~1-2 min)
+docker compose up -d                      # TimescaleDB + HAPI FHIR (first HAPI boot takes ~1-2 min)
+uv sync
 ./scripts/download_cgmacros.sh            # ~7 MB: only the CSVs, fetched from the zip via HTTP ranges
 ./scripts/generate_cohort.sh              # Synthea diabetic cohort -> data/synthea/fhir (needs Java 17)
-docker compose run --rm pipeline all      # or on the host: uv run twin all
-docker compose up -d replay               # ws://localhost:8765
+uv run twin all                           # init-db + the whole pipeline
+uv run twin replay                        # ws://localhost:8765
 ```
 
 | Service | URL |
@@ -48,6 +52,7 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 
 | Step | What it does |
 |---|---|
+| `init-db` | Creates or upgrades the twin schema: the timescaledb extension, tables from the SQLAlchemy models, hypertables with compression, continuous aggregates, report views (recreated) and reference data (upserted). |
 | `ingest` | Validates every CGMacros file and prints per-participant counts. Writes nothing. |
 | `match` | T2D participants (HbA1c ≥ 6.5 %) are matched to living Synthea diabetics: same sex, age within ±5 years at the last encounter, then nearest BMI. Assignment is greedy without replacement, most-constrained participant first. Creates `core.patient`, the `composite-patient` tag and `core.lab_result`. Writes `data/reports/match_report.csv`. |
 | `load-ehr` | First prunes Synthea patients in FHIR that are no longer linked in `core.patient`: each patient's `$everything` compartment is deleted in one transaction, and shared Organization, Practitioner and Location resources are kept. Then loads hospital and practitioner bundles, followed by the **matched** patients' bundles. Requests are rewritten from `POST` to `PUT Type/<synthea-uuid>`, so FHIR ids equal Synthea ids. |
@@ -70,8 +75,18 @@ ref.data_source 1──* core.patient 1──* core.patient_tag *──1 ref.tag
 ```
 
 Schemas: `ref` (vocabularies), `core` (patient master and patient-owned data),
-`ts` (hypertables and continuous aggregates), `report` (derived views). DDL is in
-[db/init/](db/init/).
+`ts` (hypertables and continuous aggregates), `report` (derived views).
+
+The schema is defined in code:
+- **Tables:** the SQLAlchemy 2 ORM models in [src/twin/models/](src/twin/models/), one module per database schema:
+  - `base.py`: the declarative base and enums
+  - `reference.py`: `ref.*` vocabularies
+  - `patient.py`: `core.*`, the patient master and patient-owned data
+  - `sensors.py`: `ts.*` readings
+- **TimescaleDB setup:** [src/twin/schema.py](src/twin/schema.py).
+- **Views and continuous aggregates:** SQL files in [src/twin/sql/](src/twin/sql/), with typed read-only `Table` definitions in [src/twin/models/views.py](src/twin/models/views.py).
+- **Driver:** all database access is async (`AsyncSession` on asyncpg). Sensor hypertables are bulk-loaded with COPY on the session's own connection, inside its transaction.
+- **Docker init:** the only init script, [db/init/00-create-dbs.sh](db/init/00-create-dbs.sh), creates HAPI's separate `hapi` database.
 
 Normalisation rules:
 - **One patient table.** `core.patient` holds everything that depends only on the patient: name, MRN, birth date, sex, race/ethnicity, address, source linkage, time offset and match audit. `patient_id` is the Synthea UUID, which is also the FHIR `Patient.id`.
@@ -109,3 +124,6 @@ SELECT * FROM report.cgm_daily WHERE coverage_pct >= 70;
 uv sync
 uv run pytest            # SQL view tests run when the twin DB is reachable, else skip
 ```
+
+`DATABASE_URL` can be a plain `postgresql://` URL; the asyncpg driver is selected
+automatically. The session time zone is set to `America/Chicago`.

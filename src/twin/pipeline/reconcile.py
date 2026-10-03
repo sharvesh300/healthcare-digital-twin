@@ -14,11 +14,11 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from twin.models import views as v
 from twin.config import Settings, settings
 from twin.db import lookup, session_scope
-from twin.fhir_client import FhirClient, twin_id
+from twin.fhir.client import FhirClient, twin_id
 from twin.models import LabResult, ObservationCode, Patient, PatientTag, Tag
+from twin.models import views as v
 
 TAG_SYSTEM = "urn:healthcare-digital-twin:tags"
 OVERRIDE_TAG = {"system": TAG_SYSTEM, "code": "composite-override",

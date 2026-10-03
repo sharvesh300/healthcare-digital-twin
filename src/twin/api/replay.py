@@ -14,10 +14,10 @@ from uuid import UUID
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, text
 
-from twin.models import views as v
 from twin.config import settings
 from twin.db import dispose_engine, engine, session_scope
 from twin.models import Patient
+from twin.models import views as v
 
 
 @asynccontextmanager

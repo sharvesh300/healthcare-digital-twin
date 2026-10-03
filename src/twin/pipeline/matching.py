@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
-from twin.cgmacros import Participant
-from twin.synthea import SyntheaPatient
+from twin.sources.cgmacros import Participant
+from twin.sources.synthea import SyntheaPatient
 
 
 @dataclass(frozen=True)

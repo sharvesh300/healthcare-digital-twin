@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from twin import cgmacros
+from twin.sources import cgmacros
 
 BIO = (
     "subject,Age,Gender,BMI,Body weight ,Height ,Self-identify ,A1c PDL (Lab),Fasting GLU - PDL (Lab),"

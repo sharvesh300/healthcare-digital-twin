@@ -2,7 +2,7 @@ from datetime import date
 
 import pandas as pd
 
-from twin.cgmacros import shift
+from twin.sources.cgmacros import shift
 
 
 def test_shift_preserves_wall_clock_time():

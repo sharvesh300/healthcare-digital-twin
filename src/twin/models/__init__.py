@@ -14,7 +14,7 @@ Conventions
     they live in the report.* views
 
 TimescaleDB objects and the views are created on top of these tables by
-twin.schema.init_db.
+twin.db.schema.init_db.
 """
 
 from twin.models.base import Base, DeviceKind, MealType, Sex

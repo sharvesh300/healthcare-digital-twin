@@ -10,9 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from twin.models import views as v
 from twin.db import copy_records, dispose_engine, engine
-from twin.models import Device, DeviceModel, GlucoseReading, LabResult, ObservationCode, Patient
+from twin.models import (
+    Device,
+    DeviceModel,
+    GlucoseReading,
+    LabResult,
+    ObservationCode,
+    Patient,
+)
+from twin.models import views as v
 
 pytestmark = pytest.mark.asyncio
 

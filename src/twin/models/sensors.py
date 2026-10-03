@@ -1,6 +1,6 @@
 """Schema `ts`: raw sensor streams, keyed by device (the device knows its patient).
 
-These tables become TimescaleDB hypertables in twin.schema.init_db.
+These tables become TimescaleDB hypertables in twin.db.schema.init_db.
 """
 
 from __future__ import annotations

@@ -13,11 +13,11 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-from twin.models import views as v
 from twin.config import Settings
 from twin.db import session_scope
-from twin.fhir_client import FhirClient, twin_id
+from twin.fhir.client import FhirClient, twin_id
 from twin.models import Device, Patient
+from twin.models import views as v
 
 TAG = {"system": "urn:healthcare-digital-twin:tags", "code": "composite-patient",
        "display": "Composite patient: real CGM/wearable data + synthetic EHR history"}

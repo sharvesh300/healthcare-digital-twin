@@ -1,7 +1,7 @@
 """Read-only table definitions for the views and continuous aggregates.
 
 They live in their own MetaData so `create_all` never tries to create them; the
-DDL is in twin/sql/*.sql and is applied by twin.schema.init_db. Numeric columns
+DDL is in twin/db/sql/*.sql and is applied by twin.db.schema.init_db. Numeric columns
 come back as float (these feed JSON/FHIR output, not arithmetic).
 """
 

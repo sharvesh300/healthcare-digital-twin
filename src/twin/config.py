@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://twin:twin_dev_password@localhost:5432/twin"
     fhir_base: str = "http://localhost:8080/fhir"
     data_dir: Path = Path("data")
+    seeds_dir: Path = Path("seeds")
     replay_speed: float = 60.0
 
     # CGMacros timestamps are naive local time from a Texas study site.

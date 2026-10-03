@@ -1,9 +1,9 @@
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
-from twin.cgmacros import Participant
-from twin.matching import day_offset, match
-from twin.synthea import SyntheaPatient
+from twin.pipeline.matching import day_offset, match
+from twin.sources.cgmacros import Participant
+from twin.sources.synthea import SyntheaPatient
 
 TZ = ZoneInfo("America/Chicago")
 LAST = datetime(2026, 8, 15, 15, 0, tzinfo=timezone.utc)

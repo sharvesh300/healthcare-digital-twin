@@ -11,11 +11,19 @@ import pandas as pd
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 
-from twin import cgmacros
 from twin.config import Settings
 from twin.db import copy_records, engine, session_scope
-from twin.models import Device, DeviceModel, FitbitReading, GlucoseReading, Meal, MealPhoto, Patient
-from twin.patients import load_participants
+from twin.models import (
+    Device,
+    DeviceModel,
+    FitbitReading,
+    GlucoseReading,
+    Meal,
+    MealPhoto,
+    Patient,
+)
+from twin.pipeline.patients import load_participants
+from twin.sources import cgmacros
 
 # CGMacros column / stream -> (manufacturer, model_name) in ref.device_model
 DEXCOM = ("Dexcom", "G6 Pro")

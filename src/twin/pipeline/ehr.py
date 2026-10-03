@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import time
 
-from twin.config import Settings
 from sqlalchemy import select
 
+from twin.config import Settings
 from twin.db import session_scope
-from twin.fhir_client import FhirClient, synthea_to_put_transaction
+from twin.fhir.client import FhirClient, synthea_to_put_transaction
 from twin.models import Patient
-from twin.synthea import SYNTHEA_ID_SYSTEM, index_cohort, support_bundles
+from twin.sources.synthea import SYNTHEA_ID_SYSTEM, index_cohort, support_bundles
 
 
 async def prune_unlinked(fhir: FhirClient, linked: set[str], log=print) -> list[str]:

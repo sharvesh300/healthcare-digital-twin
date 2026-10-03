@@ -182,7 +182,6 @@ def native_samples(series: pd.Series, interval_min: int, tol: float = 1e-3) -> p
         return s.astype("int64")
     grid = pd.date_range(s.index.min(), s.index.max(), freq="min")
     v = s.reindex(grid).to_numpy(dtype=float)
-    n = len(v)
     valid = ~np.isnan(v)
     prev_valid = np.r_[False, valid[:-1]]
     next_valid = np.r_[valid[1:], False]

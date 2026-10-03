@@ -8,8 +8,8 @@ from typing import Any
 
 import typer
 
-from twin import cgmacros
 from twin.config import settings
+from twin.sources import cgmacros
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
 
@@ -32,13 +32,13 @@ def _run(step: Callable[[], Awaitable[Any]]) -> Any:
 
 
 async def _init_db() -> None:
-    from twin.schema import init_db
+    from twin.db.schema import init_db
 
     await init_db(log=typer.echo)
 
 
 async def _match() -> None:
-    from twin.patients import run_match
+    from twin.pipeline.patients import run_match
 
     matches, unmatched = await run_match(settings())
     for m in matches:
@@ -49,25 +49,25 @@ async def _match() -> None:
 
 
 async def _load_ehr(force: bool = False) -> None:
-    from twin.ehr import run_load_ehr
+    from twin.pipeline.ehr import run_load_ehr
 
     typer.echo(f"{await run_load_ehr(settings(), force=force, log=typer.echo)} patient bundles loaded")
 
 
 async def _load_sensors() -> None:
-    from twin.timeseries import run_load_sensors
+    from twin.pipeline.sensors import run_load_sensors
 
     await run_load_sensors(settings(), log=typer.echo)
 
 
 async def _reconcile() -> None:
-    from twin.reconcile import run_reconcile
+    from twin.pipeline.reconcile import run_reconcile
 
     await run_reconcile(settings(), log=typer.echo)
 
 
 async def _summarize() -> None:
-    from twin.summaries import run_summarize
+    from twin.pipeline.summaries import run_summarize
 
     typer.echo(await run_summarize(settings(), log=typer.echo))
 
@@ -151,7 +151,7 @@ def run_all() -> None:
 @app.command()
 def replay(host: str = "127.0.0.1", port: int = 8765) -> None:
     """Serve the WebSocket live sensor feed."""
-    from twin.replay import serve
+    from twin.api.replay import serve
 
     serve(host, port)
 

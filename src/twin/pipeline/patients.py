@@ -9,12 +9,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from twin import cgmacros
 from twin.config import Settings
 from twin.db import lookup, session_scope
-from twin.matching import Match, day_offset, match
 from twin.models import DataSource, LabResult, ObservationCode, Patient, PatientTag, Tag
-from twin.synthea import index_cohort
+from twin.pipeline.matching import Match, day_offset, match
+from twin.sources import cgmacros
+from twin.sources.synthea import index_cohort
 
 SOURCE_CODE = "cgmacros"
 COMPOSITE_TAG = "composite-patient"

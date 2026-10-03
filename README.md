@@ -28,12 +28,38 @@ replay server run on the host with `uv` and connect to them on `localhost`.
 
 ```bash
 cp .env.example .env                      # set PG_PORT etc. if 5432/8080 are taken
-docker compose up -d                      # TimescaleDB + HAPI FHIR (first HAPI boot takes ~1-2 min)
 uv sync
-./scripts/download_cgmacros.sh            # ~7 MB: only the CSVs, fetched from the zip via HTTP ranges
-./scripts/generate_cohort.sh              # Synthea diabetic cohort -> data/synthea/fhir (needs Java 17)
-uv run twin all                           # init-db + the whole pipeline
-uv run twin replay                        # ws://localhost:8765
+scripts/up.sh                             # docker compose up -d, waits for TimescaleDB + HAPI FHIR
+seeds/download_cgmacros.sh                # ~7 MB: only the CSVs, fetched from the zip via HTTP ranges
+seeds/generate_cohort.sh                  # Synthea diabetic cohort -> data/synthea/fhir (needs Java 17)
+scripts/pipeline.sh                       # uv run twin all: init-db + the whole pipeline
+scripts/replay.sh                         # ws://localhost:8765
+```
+
+`scripts/pipeline.sh <step>` runs a single step, for example `scripts/pipeline.sh reconcile`.
+`scripts/reset.sh` asks for confirmation, then wipes this project's Docker volume and rebuilds
+everything. Downloaded data in `data/` is kept.
+
+## Project layout
+
+```
+seeds/                    everything the databases are seeded from
+  reference/*.csv         ref vocabularies (data sources, tags, LOINC codes, device models), loaded by init-db
+  download_cgmacros.sh    real participants: CGMacros CSVs -> data/raw/cgmacros
+  fetch_cgmacros.py         (HTTP-range reader used by download_cgmacros.sh)
+  generate_cohort.sh      synthetic EHRs: Synthea diabetic cohort -> data/synthea/fhir
+scripts/                  running the system: up.sh, pipeline.sh, replay.sh, reset.sh
+db/init/                  Docker init: creates HAPI's database
+src/twin/
+  cli.py, config.py       `twin` command and settings
+  db/                     async engine/session (engine.py), init-db (schema.py), view SQL (sql/)
+  models/                 ORM models, one module per DB schema, plus read-only view tables
+  sources/                CGMacros and Synthea readers
+  fhir/                   async HAPI FHIR client
+  pipeline/               steps: matching/patients, ehr, sensors, reconcile, summaries
+  api/                    replay server (FastAPI WebSocket)
+tests/
+data/                     downloads, generated cohort, reports (gitignored)
 ```
 
 | Service | URL |
@@ -42,7 +68,7 @@ uv run twin replay                        # ws://localhost:8765
 | HAPI FHIR R4 | http://localhost:8080/fhir |
 | Replay | http://localhost:8765/patients, `ws://localhost:8765/ws/patients/{patient_id}?speed=60` |
 
-`scripts/generate_cohort.sh` reads `SYNTHEA_DIR` (default `~/testing/synthea`),
+`seeds/generate_cohort.sh` reads `SYNTHEA_DIR` (default `~/testing/synthea`),
 `POPULATION` (150), `SEED` (42) and `REFERENCE_DATE` (`20261003`). The same values
 always produce the same cohort, because Synthea runs single-threaded with a fixed
 reference date. If you change them, the cohort changes and participants are re-matched
@@ -52,7 +78,7 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 
 | Step | What it does |
 |---|---|
-| `init-db` | Creates or upgrades the twin schema: the timescaledb extension, tables from the SQLAlchemy models, hypertables with compression, continuous aggregates, report views (recreated) and reference data (upserted). |
+| `init-db` | Creates or upgrades the twin schema: the timescaledb extension, tables from the SQLAlchemy models, hypertables with compression, continuous aggregates and report views (recreated). Reference data is upserted from `seeds/reference/*.csv`. |
 | `ingest` | Validates every CGMacros file and prints per-participant counts. Writes nothing. |
 | `match` | T2D participants (HbA1c ≥ 6.5 %) are matched to living Synthea diabetics: same sex, age within ±5 years at the last encounter, then nearest BMI. Assignment is greedy without replacement, most-constrained participant first. Creates `core.patient`, the `composite-patient` tag and `core.lab_result`. Writes `data/reports/match_report.csv`. |
 | `load-ehr` | First prunes Synthea patients in FHIR that are no longer linked in `core.patient`: each patient's `$everything` compartment is deleted in one transaction, and shared Organization, Practitioner and Location resources are kept. Then loads hospital and practitioner bundles, followed by the **matched** patients' bundles. Requests are rewritten from `POST` to `PUT Type/<synthea-uuid>`, so FHIR ids equal Synthea ids. |
@@ -83,8 +109,9 @@ The schema is defined in code:
   - `reference.py`: `ref.*` vocabularies
   - `patient.py`: `core.*`, the patient master and patient-owned data
   - `sensors.py`: `ts.*` readings
-- **TimescaleDB setup:** [src/twin/schema.py](src/twin/schema.py).
-- **Views and continuous aggregates:** SQL files in [src/twin/sql/](src/twin/sql/), with typed read-only `Table` definitions in [src/twin/models/views.py](src/twin/models/views.py).
+- **TimescaleDB setup:** [src/twin/db/schema.py](src/twin/db/schema.py).
+- **Reference data:** seeded from [seeds/reference/](seeds/reference/).
+- **Views and continuous aggregates:** SQL files in [src/twin/db/sql/](src/twin/db/sql/), with typed read-only `Table` definitions in [src/twin/models/views.py](src/twin/models/views.py).
 - **Driver:** all database access is async (`AsyncSession` on asyncpg). Sensor hypertables are bulk-loaded with COPY on the session's own connection, inside its transaction.
 - **Docker init:** the only init script, [db/init/00-create-dbs.sh](db/init/00-create-dbs.sh), creates HAPI's separate `hapi` database.
 

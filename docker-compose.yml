@@ -1,0 +1,64 @@
+name: healthcare-digital-twin
+
+x-pg-env: &pg-env
+  POSTGRES_USER: ${POSTGRES_USER:-twin}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-twin_dev_password}
+  POSTGRES_DB: ${POSTGRES_DB:-twin}
+
+x-twin-env: &twin-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-twin}:${POSTGRES_PASSWORD:-twin_dev_password}@db:5432/${POSTGRES_DB:-twin}
+  FHIR_BASE: http://fhir:8080/fhir
+  DATA_DIR: /data
+  REPLAY_SPEED: ${REPLAY_SPEED:-60}
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      <<: *pg-env
+      HAPI_DB: ${HAPI_DB:-hapi}
+    ports: ["${PG_PORT:-5432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  fhir:
+    image: hapiproject/hapi:latest
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${HAPI_DB:-hapi}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-twin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-twin_dev_password}
+      SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      HAPI_FHIR_FHIR_VERSION: R4
+      HAPI_FHIR_CLIENT_ID_STRATEGY: ANY
+      JAVA_TOOL_OPTIONS: -Xmx2g
+    ports: ["${FHIR_PORT:-8080}:8080"]
+
+  pipeline:
+    build: .
+    profiles: [tools]
+    depends_on:
+      db: { condition: service_healthy }
+      fhir: { condition: service_started }
+    environment: *twin-env
+    volumes:
+      - ./data:/data
+
+  replay:
+    build: .
+    command: ["replay", "--host", "0.0.0.0", "--port", "8765"]
+    depends_on:
+      db: { condition: service_healthy }
+    environment: *twin-env
+    ports: ["${REPLAY_PORT:-8765}:8765"]
+
+volumes:
+  pgdata:

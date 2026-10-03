@@ -1,0 +1,5 @@
+model_id,manufacturer,model_name,kind,specimen,nominal_interval_minutes
+1,Dexcom,G6 Pro,cgm,interstitial,5
+2,Abbott,FreeStyle Libre Pro,cgm,interstitial,15
+3,Ascensia,Contour Next,glucometer,capillary,
+4,Fitbit,Sense,wearable,,1

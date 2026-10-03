@@ -4,7 +4,7 @@ The archive is ~657 MB, almost all of it meal photos. PhysioNet serves it with
 HTTP range support, so we read the zip's central directory remotely and pull
 just the *.csv members (~20 MB). Stdlib only, so it runs before `uv sync`.
 
-    python scripts/fetch_cgmacros.py [dest_dir]
+    python seeds/fetch_cgmacros.py [dest_dir]
 """
 
 import io

@@ -1,0 +1,23 @@
+code_id,loinc,display,ucum_unit
+1,4548-4,Hemoglobin A1c/Hemoglobin.total in Blood,%
+2,1558-6,Fasting glucose [Mass/volume] in Serum or Plasma,mg/dL
+3,20448-7,Insulin [Units/volume] in Serum or Plasma,u[IU]/mL
+4,2093-3,Cholesterol [Mass/volume] in Serum or Plasma,mg/dL
+5,2085-9,Cholesterol in HDL [Mass/volume] in Serum or Plasma,mg/dL
+6,2571-8,Triglyceride [Mass/volume] in Serum or Plasma,mg/dL
+7,29463-7,Body weight,kg
+8,8302-2,Body height,cm
+20,39156-5,Body mass index (BMI) [Ratio],kg/m2
+21,13457-7,Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation,mg/dL
+22,97507-8,Average glucose [Mass/volume] in Interstitial fluid during Reporting Period,mg/dL
+23,97506-0,Glucose management indicator,%
+24,106793-3,Glucose times in ranges panel,%
+25,104642-4,Time in very low range (<54 mg/dL),%
+26,104641-6,Time in low range (54-69 mg/dL),%
+27,97510-2,Time in target range (70-180 mg/dL),%
+28,104640-8,Time in high range (181-250 mg/dL),%
+29,104639-0,Time in very high range (>250 mg/dL),%
+30,104638-2,Glucose coefficient of variation,%
+31,8867-4,Heart rate,/min
+32,99504-3,Glucose [Mass/volume] in Interstitial fluid,mg/dL
+33,41653-7,Glucose [Mass/volume] in Capillary blood by Glucometer,mg/dL

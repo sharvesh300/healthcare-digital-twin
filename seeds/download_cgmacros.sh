@@ -4,4 +4,4 @@
 # the full 657 MB archive (mostly meal photos) is not downloaded.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-python3 "$ROOT/scripts/fetch_cgmacros.py" "$ROOT/data/raw/cgmacros"
+python3 "$ROOT/seeds/fetch_cgmacros.py" "$ROOT/data/raw/cgmacros"

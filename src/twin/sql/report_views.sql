@@ -1,4 +1,5 @@
 -- Derived metrics. Nothing here is stored; every value is computed from core/ts.
+-- Recreated on every `twin init-db` (the report schema holds only these views).
 
 -- Patient master + computed age + tag list.
 CREATE VIEW report.patient_summary AS

@@ -11,9 +11,14 @@ from __future__ import annotations
 import csv
 from decimal import Decimal
 
-from twin.config import Settings
-from twin.db import connect
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
+
+from twin.models import views as v
+from twin.config import Settings, settings
+from twin.db import lookup, session_scope
 from twin.fhir_client import FhirClient, twin_id
+from twin.models import LabResult, ObservationCode, Patient, PatientTag, Tag
 
 TAG_SYSTEM = "urn:healthcare-digital-twin:tags"
 OVERRIDE_TAG = {"system": TAG_SYSTEM, "code": "composite-override",
@@ -56,6 +61,7 @@ def _race_extensions(race_ethnicity: str | None) -> list[dict]:
 
 
 def _observation(patient_id, loinc, display, unit, value, effective, derived_from=()) -> dict:
+    effective = effective.astimezone(settings().tz)
     category = "vital-signs" if loinc in VITAL_SIGNS else "laboratory"
     obs = {
         "resourceType": "Observation",
@@ -75,80 +81,90 @@ def _observation(patient_id, loinc, display, unit, value, effective, derived_fro
     return obs
 
 
-def run_reconcile(cfg: Settings, log=print) -> list[dict]:
-    fhir = FhirClient()
-    fhir.wait_ready()
-    report = []
-    with connect() as conn:
-        tag_ids = dict(conn.execute("SELECT code, tag_id FROM ref.tag").fetchall())
-        tag_meta = {code: {"system": system, "code": code, "display": display}
-                    for code, system, display in conn.execute("SELECT code, fhir_system, display FROM ref.tag")}
-        codes = {loinc: (display, unit) for loinc, display, unit in
-                 conn.execute("SELECT loinc, display, ucum_unit FROM ref.observation_code")}
-
-        # 1. Metric-based tags follow the data.
-        conn.execute("DELETE FROM core.patient_tag WHERE tag_id = ANY(%s)",
-                     ([tag_ids[t] for t in GMI_TAGS.values()],))
-        for patient_id, status in conn.execute("SELECT patient_id, status FROM report.consistency").fetchall():
-            if status in GMI_TAGS:
-                conn.execute("INSERT INTO core.patient_tag (patient_id, tag_id) VALUES (%s, %s)",
-                             (patient_id, tag_ids[GMI_TAGS[status]]))
-        conn.commit()
-
-        patients = conn.execute(
-            """
-            SELECT s.patient_id, s.race_ethnicity, s.tags, s.source_subject_id,
-                   c.hba1c, c.gmi, c.abs_diff, c.status, c.mean_mg_dl, c.device_model
-            FROM report.patient_summary s LEFT JOIN report.consistency c USING (patient_id)
-            ORDER BY s.source_subject_id
-            """
-        ).fetchall()
-        for patient_id, race_eth, tags, subject_id, hba1c, gmi, diff, status, mean, cgm in patients:
-            pid = str(patient_id)
-            # 2. Patient: tags + race/ethnicity. HAPI merges tags on update, so tags of
-            #    ours that are no longer assigned are removed with $meta-delete.
-            patient = fhir.get(f"/Patient/{pid}")
-            current = {t.get("code") for t in patient.get("meta", {}).get("tag", []) if t.get("system") == TAG_SYSTEM}
-            fhir.meta_delete_tags("Patient", pid, [tag_meta[c] for c in current - set(tags) if c in tag_meta])
-            patient["meta"] = {"tag": [tag_meta[c] for c in tags]}
-            patient["extension"] = [
-                e for e in patient.get("extension", []) if e["url"] not in (US_CORE_RACE, US_CORE_ETHNICITY)
-            ] + _race_extensions(race_eth)
-
-            # 3. Baseline labs, measured then derived.
-            labs = conn.execute(
-                """
-                SELECT DISTINCT ON (c.loinc) c.loinc, lr.value, lr.effective_at
-                FROM core.lab_result lr JOIN ref.observation_code c USING (code_id)
-                WHERE lr.patient_id = %s ORDER BY c.loinc, lr.effective_at DESC
-                """,
-                (patient_id,),
-            ).fetchall()
-            resources = [patient]
-            for loinc, value, effective in labs:
-                display, unit = codes[loinc]
-                resources.append(_observation(pid, loinc, display, unit, _num(value), effective))
-            bmi, ldl, effective = conn.execute(
-                "SELECT bmi, ldl, effective_at FROM report.patient_baseline WHERE patient_id = %s", (patient_id,)
-            ).fetchone()
-            if bmi is not None:
-                resources.append(_observation(pid, "39156-5", *codes["39156-5"], _num(bmi), effective,
-                                              derived_from=("29463-7", "8302-2")))
-            if ldl is not None:
-                resources.append(_observation(pid, "13457-7", *codes["13457-7"], _num(ldl), effective,
-                                              derived_from=("2093-3", "2085-9", "2571-8")))
-            fhir.put_all(resources)
-            conn.execute("UPDATE core.patient SET fhir_synced_at = now() WHERE patient_id = %s", (patient_id,))
-            conn.commit()
-
-            row = {"subject_id": subject_id, "patient_id": pid, "hba1c": _num(hba1c), "cgm_mean_mg_dl": _num(mean),
-                   "gmi": _num(gmi), "abs_diff": _num(diff), "status": status, "cgm": cgm, "tags": ";".join(tags)}
-            report.append(row)
-            log(row)
+async def run_reconcile(cfg: Settings, log=print) -> list[dict]:
+    async with session_scope() as s:
+        await _retag_from_consistency(s)
+    async with FhirClient() as fhir:
+        await fhir.wait_ready()
+        report = await _sync_patients(fhir, log)
 
     out = cfg.reports_dir / "consistency_report.csv"
     with out.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(report[0]) if report else ["subject_id"])
         writer.writeheader()
         writer.writerows(report)
+    return report
+
+
+async def _retag_from_consistency(s) -> None:
+    """Metric-based tags follow the data: drop and recompute gmi-warn/gmi-inconsistent."""
+    tag_ids = await lookup(s, Tag.code, Tag.tag_id)
+    await s.execute(delete(PatientTag).where(PatientTag.tag_id.in_([tag_ids[t] for t in GMI_TAGS.values()])))
+    rows = [
+        {"patient_id": pid, "tag_id": tag_ids[GMI_TAGS[status]]}
+        for pid, status in (await s.execute(select(v.consistency.c.patient_id, v.consistency.c.status)))
+        if status in GMI_TAGS
+    ]
+    if rows:
+        await s.execute(insert(PatientTag).values(rows))
+
+
+async def _sync_patients(fhir: FhirClient, log) -> list[dict]:
+    report = []
+    async with session_scope() as s:
+        tag_meta = {code: {"system": system, "code": code, "display": display}
+                    for code, system, display in (await s.execute(select(Tag.code, Tag.fhir_system, Tag.display)))}
+        codes = {loinc: (display, unit) for loinc, display, unit in
+                 (await s.execute(select(ObservationCode.loinc, ObservationCode.display, ObservationCode.ucum_unit)))}
+        ps, c = v.patient_summary.c, v.consistency.c
+        patients = (await s.execute(
+            select(ps.patient_id, ps.race_ethnicity, ps.tags, ps.source_subject_id,
+                   c.hba1c, c.gmi, c.abs_diff, c.status, c.mean_mg_dl, c.device_model)
+            .select_from(v.patient_summary.outerjoin(v.consistency, ps.patient_id == c.patient_id))
+            .order_by(ps.source_subject_id)
+        )).all()
+
+    for patient_id, race_eth, tags, subject_id, hba1c, gmi, diff, status, mean, cgm in patients:
+        pid = str(patient_id)
+        # Patient: tags + race/ethnicity. HAPI merges tags on update, so tags of
+        # ours that are no longer assigned are removed with $meta-delete.
+        patient = await fhir.get(f"/Patient/{pid}")
+        current = {t.get("code") for t in patient.get("meta", {}).get("tag", []) if t.get("system") == TAG_SYSTEM}
+        await fhir.meta_delete_tags("Patient", pid, [tag_meta[t] for t in current - set(tags) if t in tag_meta])
+        patient["meta"] = {"tag": [tag_meta[t] for t in tags]}
+        patient["extension"] = [
+            e for e in patient.get("extension", []) if e["url"] not in (US_CORE_RACE, US_CORE_ETHNICITY)
+        ] + _race_extensions(race_eth)
+
+        # Baseline labs, measured then derived.
+        async with session_scope() as s:
+            labs = (await s.execute(
+                select(ObservationCode.loinc, LabResult.value, LabResult.effective_at)
+                .join(ObservationCode, ObservationCode.code_id == LabResult.code_id)
+                .where(LabResult.patient_id == patient_id)
+                .distinct(ObservationCode.loinc)
+                .order_by(ObservationCode.loinc, LabResult.effective_at.desc())
+            )).all()
+            b = v.patient_baseline.c
+            bmi, ldl, effective = (await s.execute(
+                select(b.bmi, b.ldl, b.effective_at).where(b.patient_id == patient_id)
+            )).one()
+
+            resources = [patient]
+            for loinc, value, at in labs:
+                display, unit = codes[loinc]
+                resources.append(_observation(pid, loinc, display, unit, _num(value), at))
+            if bmi is not None:
+                resources.append(_observation(pid, "39156-5", *codes["39156-5"], bmi, effective,
+                                              derived_from=("29463-7", "8302-2")))
+            if ldl is not None:
+                resources.append(_observation(pid, "13457-7", *codes["13457-7"], ldl, effective,
+                                              derived_from=("2093-3", "2085-9", "2571-8")))
+            await fhir.put_all(resources)
+            await s.execute(update(Patient).where(Patient.patient_id == patient_id).values(fhir_synced_at=func.now()))
+
+        row = {"subject_id": subject_id, "patient_id": pid, "hba1c": hba1c, "cgm_mean_mg_dl": mean,
+               "gmi": gmi, "abs_diff": diff, "status": status, "cgm": cgm, "tags": ";".join(tags)}
+        report.append(row)
+        log(row)
     return report

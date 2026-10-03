@@ -11,9 +11,13 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
+from sqlalchemy import select
+
+from twin.models import views as v
 from twin.config import Settings
-from twin.db import connect
+from twin.db import session_scope
 from twin.fhir_client import FhirClient, twin_id
+from twin.models import Device, Patient
 
 TAG = {"system": "urn:healthcare-digital-twin:tags", "code": "composite-patient",
        "display": "Composite patient: real CGM/wearable data + synthetic EHR history"}
@@ -58,81 +62,84 @@ def _obs(oid, patient_id, device_id, code, display, start, end, category="labora
     }
 
 
-def run_summarize(cfg: Settings, log=print) -> dict[str, int]:
-    fhir = FhirClient()
-    fhir.wait_ready()
+async def run_summarize(cfg: Settings, log=print) -> dict[str, int]:
     counts = {"devices": 0, "observations": 0}
-    with connect() as conn:
-        patients = [r[0] for r in conn.execute("SELECT patient_id FROM core.patient ORDER BY source_subject_id")]
-        for patient_id in patients:
-            pid = str(patient_id)
-            resources = []
-            for device_id, manufacturer, model, kind in conn.execute(
-                """
-                SELECT d.device_id, m.manufacturer, m.model_name, m.kind
-                FROM core.device d JOIN ref.device_model m USING (model_id)
-                WHERE d.patient_id = %s ORDER BY d.device_id
-                """,
-                (patient_id,),
-            ):
-                resources.append({
-                    "resourceType": "Device",
-                    "id": twin_id("device", device_id),
-                    "meta": {"tag": [TAG]},
-                    "identifier": [{"system": "urn:healthcare-digital-twin:device", "value": str(device_id)}],
-                    "status": "active",
-                    "manufacturer": manufacturer,
-                    "deviceName": [{"name": f"{manufacturer} {model}", "type": "manufacturer-name"}],
-                    "type": {"text": DEVICE_TYPE[kind]},
-                    "patient": {"reference": f"Patient/{pid}"},
-                })
-            counts["devices"] += len(resources)
-
-            for row in conn.execute(
-                """
-                SELECT day, device_id, mean_mg_dl, cv_pct, pct_very_low, pct_low, pct_target,
-                       pct_high, pct_very_high
-                FROM report.cgm_daily WHERE patient_id = %s AND coverage_pct >= %s ORDER BY day
-                """,
-                (patient_id, MIN_COVERAGE_PCT),
-            ).fetchall():
-                day, device_id, mean, cv, *pcts = row
-                end = day + timedelta(days=1)
-                key = day.date().isoformat()
-                resources.append(_obs(twin_id(pid, "cgm-mean", key), pid, device_id, "97507-8",
-                                      "Average glucose in interstitial fluid", day, end,
-                                      valueQuantity=_qty(mean, "mg/dL")))
-                resources.append(_obs(twin_id(pid, "cgm-cv", key), pid, device_id, "104638-2",
-                                      "Glucose coefficient of variation", day, end, valueQuantity=_qty(cv, "%")))
-                resources.append(_obs(
-                    twin_id(pid, "cgm-tir", key), pid, device_id, "106793-3", "Glucose times in ranges", day, end,
-                    component=[{"code": _code(code, display), "valueQuantity": _qty(pct, "%")}
-                               for (_, code, display), pct in zip(TIR_COMPONENTS, pcts)],
-                ))
-
-            window = conn.execute(
-                "SELECT device_id, period_start, period_end, gmi FROM report.cgm_window WHERE patient_id = %s",
-                (patient_id,),
-            ).fetchone()
-            if window:
-                device_id, start, end, gmi = window
-                resources.append(_obs(twin_id(pid, "cgm-gmi"), pid, device_id, "97506-0",
-                                      "Glucose management indicator", start, end, valueQuantity=_qty(gmi, "%")))
-
-            for day, device_id, mean_hr in conn.execute(
-                """
-                SELECT f.day, f.device_id, round(f.mean_hr, 0)
-                FROM ts.fitbit_daily f JOIN core.device d USING (device_id)
-                WHERE d.patient_id = %s AND f.minutes_worn >= 1440 * %s / 100.0 ORDER BY f.day
-                """,
-                (patient_id, MIN_COVERAGE_PCT),
-            ).fetchall():
-                resources.append(_obs(twin_id(pid, "hr-mean", day.date().isoformat()), pid, device_id, "8867-4",
-                                      "Heart rate (daily mean)", day, day + timedelta(days=1),
-                                      category="vital-signs", valueQuantity=_qty(mean_hr, "/min")))
-
-            fhir.put_all(resources)
+    async with FhirClient() as fhir:
+        await fhir.wait_ready()
+        async with session_scope() as s:
+            patient_ids = list(await s.scalars(select(Patient.patient_id).order_by(Patient.source_subject_id)))
+        for patient_id in patient_ids:
+            async with session_scope() as s:
+                resources = await _patient_resources(s, patient_id, cfg)
+            await fhir.put_all(resources)
             n_obs = sum(r["resourceType"] == "Observation" for r in resources)
+            n_dev = sum(r["resourceType"] == "Device" for r in resources)
             counts["observations"] += n_obs
-            log(f"{pid}: {n_obs} observations, {sum(r['resourceType'] == 'Device' for r in resources)} devices")
+            counts["devices"] += n_dev
+            log(f"{patient_id}: {n_obs} observations, {n_dev} devices")
     return counts
+
+
+async def _patient_resources(s, patient_id, cfg: Settings) -> list[dict]:
+    pid = str(patient_id)
+    tz = cfg.tz
+    resources = []
+    devices = await s.scalars(select(Device).where(Device.patient_id == patient_id).order_by(Device.device_id))
+    for device in devices:
+        m = device.model
+        resources.append({
+            "resourceType": "Device",
+            "id": twin_id("device", device.device_id),
+            "meta": {"tag": [TAG]},
+            "identifier": [{"system": "urn:healthcare-digital-twin:device", "value": str(device.device_id)}],
+            "status": "active",
+            "manufacturer": m.manufacturer,
+            "deviceName": [{"name": f"{m.manufacturer} {m.model_name}", "type": "manufacturer-name"}],
+            "type": {"text": DEVICE_TYPE[m.kind]},
+            "patient": {"reference": f"Patient/{pid}"},
+        })
+
+    c = v.cgm_daily.c
+    daily = await s.execute(
+        select(c.day, c.device_id, c.mean_mg_dl, c.cv_pct, c.pct_very_low, c.pct_low, c.pct_target,
+               c.pct_high, c.pct_very_high)
+        .where(c.patient_id == patient_id, c.coverage_pct >= MIN_COVERAGE_PCT)
+        .order_by(c.day)
+    )
+    for day, device_id, mean, cv, *pcts in daily:
+        day = day.astimezone(tz)
+        end = day + timedelta(days=1)  # wall-clock day, correct across DST changes
+        key = day.date().isoformat()
+        resources.append(_obs(twin_id(pid, "cgm-mean", key), pid, device_id, "97507-8",
+                              "Average glucose in interstitial fluid", day, end,
+                              valueQuantity=_qty(mean, "mg/dL")))
+        resources.append(_obs(twin_id(pid, "cgm-cv", key), pid, device_id, "104638-2",
+                              "Glucose coefficient of variation", day, end, valueQuantity=_qty(cv, "%")))
+        resources.append(_obs(
+            twin_id(pid, "cgm-tir", key), pid, device_id, "106793-3", "Glucose times in ranges", day, end,
+            component=[{"code": _code(code, display), "valueQuantity": _qty(pct, "%")}
+                       for (_, code, display), pct in zip(TIR_COMPONENTS, pcts)],
+        ))
+
+    w = v.cgm_window.c
+    window = (await s.execute(
+        select(w.device_id, w.period_start, w.period_end, w.gmi).where(w.patient_id == patient_id)
+    )).first()
+    if window:
+        device_id, start, end, gmi = window
+        resources.append(_obs(twin_id(pid, "cgm-gmi"), pid, device_id, "97506-0", "Glucose management indicator",
+                              start.astimezone(tz), end.astimezone(tz), valueQuantity=_qty(gmi, "%")))
+
+    f = v.fitbit_daily.c
+    heart = await s.execute(
+        select(f.day, f.device_id, f.mean_hr)
+        .join(Device, Device.device_id == f.device_id)
+        .where(Device.patient_id == patient_id, f.minutes_worn >= 1440 * MIN_COVERAGE_PCT / 100)
+        .order_by(f.day)
+    )
+    for day, device_id, mean_hr in heart:
+        day = day.astimezone(tz)
+        resources.append(_obs(twin_id(pid, "hr-mean", day.date().isoformat()), pid, device_id, "8867-4",
+                              "Heart rate (daily mean)", day, day + timedelta(days=1),
+                              category="vital-signs", valueQuantity=_qty(round(mean_hr), "/min")))
+    return resources

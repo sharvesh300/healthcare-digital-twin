@@ -7,44 +7,53 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID
 
-import psycopg
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select, text
 
+from twin.models import views as v
 from twin.config import settings
+from twin.db import dispose_engine, engine, session_scope
+from twin.models import Patient
 
-app = FastAPI(title="Digital twin sensor replay")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await dispose_engine()
 
 
-async def _connect() -> psycopg.AsyncConnection:
-    cfg = settings()
-    return await psycopg.AsyncConnection.connect(cfg.database_url, options=f"-c timezone={cfg.source_tz}")
+app = FastAPI(title="Digital twin sensor replay", lifespan=lifespan)
 
 
 @app.get("/health")
 async def health() -> dict:
-    async with await _connect() as conn:
-        await conn.execute("SELECT 1")
+    async with engine().connect() as conn:
+        await conn.execute(text("SELECT 1"))
     return {"status": "ok"}
 
 
 @app.get("/patients")
 async def patients(tag: str | None = None) -> list[dict]:
-    async with await _connect() as conn:
-        cur = await conn.execute(
-            """
-            SELECT s.patient_id, s.given_name, s.family_name, s.sex, s.age, s.source, s.source_subject_id,
-                   s.tags, w.window_start, w.window_end
-            FROM report.patient_summary s LEFT JOIN report.sensor_window w USING (patient_id)
-            WHERE %(tag)s::text IS NULL OR %(tag)s = ANY(s.tags)
-            ORDER BY s.source_subject_id
-            """,
-            {"tag": tag},
-        )
-        cols = [c.name for c in cur.description]
-        return [dict(zip(cols, row)) for row in await cur.fetchall()]
+    s_, w = v.patient_summary.c, v.sensor_window.c
+    stmt = (
+        select(s_.patient_id, s_.given_name, s_.family_name, s_.sex, s_.age, s_.source, s_.source_subject_id,
+               s_.tags, w.window_start, w.window_end)
+        .select_from(v.patient_summary.outerjoin(v.sensor_window, s_.patient_id == w.patient_id))
+        .order_by(s_.source_subject_id)
+    )
+    if tag:
+        stmt = stmt.where(s_.tags.contains([tag]))
+    tz = settings().tz
+    async with session_scope() as s:
+        rows = (await s.execute(stmt)).mappings().all()
+    return [
+        {**row, **{k: row[k].astimezone(tz) for k in ("window_start", "window_end") if row[k] is not None}}
+        for row in rows
+    ]
 
 
 @app.websocket("/ws/patients/{patient_id}")
@@ -56,40 +65,39 @@ async def stream(
     start: datetime | None = Query(None, description="skip events before this twin time"),
     max_sleep: float = Query(10.0, gt=0, description="cap on any single wait, seconds"),
 ) -> None:
-    speed = settings().replay_speed if speed is None else speed
-    kind_list = [k.strip() for k in kinds.split(",")] if kinds else None
+    cfg = settings()
+    speed = cfg.replay_speed if speed is None else speed
     await ws.accept()
     try:
-        async with await _connect() as conn:
-            exists = await (await conn.execute("SELECT 1 FROM core.patient WHERE patient_id = %s", (patient_id,))).fetchone()
-            if not exists:
+        async with session_scope() as s:
+            if await s.get(Patient, patient_id) is None:
                 await ws.send_json({"kind": "error", "detail": f"unknown patient {patient_id}"})
                 await ws.close(code=4404)
                 return
             await ws.send_json({"kind": "start", "patient_id": str(patient_id), "speed": speed})
-            async with conn.transaction(), conn.cursor(name="replay") as cur:
-                await cur.execute(
-                    """
-                    SELECT time, kind, source, payload FROM report.replay_stream
-                    WHERE patient_id = %s
-                      AND (%s::text[] IS NULL OR kind = ANY(%s::text[]))
-                      AND time >= coalesce(%s::timestamptz, '-infinity')
-                    ORDER BY time, kind
-                    """,
-                    (patient_id, kind_list, kind_list, start),
-                )
-                previous = None
-                sent = 0
-                async for time, kind, source, payload in cur:
-                    if previous is not None and speed > 0:
-                        delay = (time - previous).total_seconds() / speed
-                        if delay > 0:
-                            await asyncio.sleep(min(delay, max_sleep))
-                    previous = time
-                    await ws.send_json({"time": time.isoformat(), "kind": kind, "source": source, **payload})
-                    sent += 1
-            await ws.send_json({"kind": "end", "events": sent})
-            await ws.close()
+
+            r = v.replay_stream.c
+            stmt = select(r.time, r.kind, r.source, r.payload).where(r.patient_id == patient_id)
+            if kinds:
+                stmt = stmt.where(r.kind.in_([k.strip() for k in kinds.split(",")]))
+            if start:
+                stmt = stmt.where(r.time >= start)
+            # Server-side cursor: rows are fetched in batches as the replay advances.
+            result = await s.stream(stmt.order_by(r.time, r.kind).execution_options(yield_per=500))
+
+            previous = None
+            sent = 0
+            async for time, kind, source, payload in result:
+                if previous is not None and speed > 0:
+                    delay = (time - previous).total_seconds() / speed
+                    if delay > 0:
+                        await asyncio.sleep(min(delay, max_sleep))
+                previous = time
+                await ws.send_json({"time": time.astimezone(cfg.tz).isoformat(), "kind": kind, "source": source,
+                                    **payload})
+                sent += 1
+        await ws.send_json({"kind": "end", "events": sent})
+        await ws.close()
     except WebSocketDisconnect:
         return
 

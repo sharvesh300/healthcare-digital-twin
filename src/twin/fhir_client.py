@@ -1,7 +1,8 @@
-"""Minimal HAPI FHIR R4 client plus the Synthea bundle rewrite."""
+"""Minimal async HAPI FHIR R4 client plus the Synthea bundle rewrite."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -29,47 +30,55 @@ class FhirError(RuntimeError):
 
 
 class FhirClient:
+    """Use as `async with FhirClient() as fhir:`."""
+
     def __init__(self, base: str | None = None, timeout: float = 1800):
         self.base = (base or settings().fhir_base).rstrip("/")
-        self.http = httpx.Client(
+        self.http = httpx.AsyncClient(
             base_url=self.base,
             timeout=timeout,
             headers={"Content-Type": FHIR_JSON, "Accept": FHIR_JSON},
         )
 
-    def wait_ready(self, max_wait: float = 900) -> None:
+    async def __aenter__(self) -> FhirClient:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.http.aclose()
+
+    async def wait_ready(self, max_wait: float = 900) -> None:
         deadline = time.monotonic() + max_wait
         while True:
             try:
-                if self.http.get("/metadata", timeout=10).status_code == 200:
+                if (await self.http.get("/metadata", timeout=10)).status_code == 200:
                     return
             except httpx.TransportError:
                 pass
             if time.monotonic() > deadline:
                 raise FhirError(f"FHIR server at {self.base} not ready after {max_wait}s")
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     def _check(self, r: httpx.Response) -> dict[str, Any]:
         if not r.is_success:
             raise FhirError(f"{r.request.method} {r.request.url} -> {r.status_code}: {r.text[:2000]}")
         return r.json() if r.content else {}
 
-    def get(self, path: str, **params) -> dict[str, Any]:
-        return self._check(self.http.get(path, params=params))
+    async def get(self, path: str, **params) -> dict[str, Any]:
+        return self._check(await self.http.get(path, params=params))
 
-    def exists(self, resource_type: str, rid: str) -> bool:
-        return self.http.get(f"/{resource_type}/{rid}").status_code == 200
+    async def exists(self, resource_type: str, rid: str) -> bool:
+        return (await self.http.get(f"/{resource_type}/{rid}")).status_code == 200
 
-    def put(self, resource: dict[str, Any]) -> dict[str, Any]:
-        return self._check(self.http.put(f"/{resource['resourceType']}/{resource['id']}", json=resource))
+    async def put(self, resource: dict[str, Any]) -> dict[str, Any]:
+        return self._check(await self.http.put(f"/{resource['resourceType']}/{resource['id']}", json=resource))
 
-    def post_bundle(self, bundle: dict[str, Any] | bytes) -> dict[str, Any]:
+    async def post_bundle(self, bundle: dict[str, Any] | bytes) -> dict[str, Any]:
         body = bundle if isinstance(bundle, bytes) else json.dumps(bundle).encode()
-        return self._check(self.http.post(self.base, content=body))
+        return self._check(await self.http.post(self.base, content=body))
 
-    def put_all(self, resources: list[dict[str, Any]]) -> dict[str, Any]:
+    async def put_all(self, resources: list[dict[str, Any]]) -> dict[str, Any]:
         """Upsert many resources atomically in one transaction."""
-        return self.post_bundle(
+        return await self.post_bundle(
             {
                 "resourceType": "Bundle",
                 "type": "transaction",
@@ -84,18 +93,18 @@ class FhirClient:
             }
         )
 
-    def search_ids(self, resource_type: str, **params) -> list[str]:
+    async def search_ids(self, resource_type: str, **params) -> list[str]:
         """All matching resource ids, following paging links."""
         ids: list[str] = []
-        page = self.get(f"/{resource_type}", _elements="id", _count=500, **params)
+        page = await self.get(f"/{resource_type}", _elements="id", _count=500, **params)
         while True:
             ids += [e["resource"]["id"] for e in page.get("entry", [])]
             nxt = next((link["url"] for link in page.get("link", []) if link["relation"] == "next"), None)
             if not nxt:
                 return ids
-            page = self._check(self.http.get(nxt))
+            page = self._check(await self.http.get(nxt))
 
-    def delete_patient(self, patient_id: str) -> int:
+    async def delete_patient(self, patient_id: str) -> int:
         """Delete a patient with its whole compartment in one transaction.
 
         HAPI's `_cascade=delete` commits round by round and can stop half way, so the
@@ -105,26 +114,26 @@ class FhirClient:
         the server rejects the transaction and nothing is deleted.
         """
         targets: list[tuple[str, str]] = []
-        page = self.get(f"/Patient/{patient_id}/$everything", _count=1000, _elements="id")
+        page = await self.get(f"/Patient/{patient_id}/$everything", _count=1000, _elements="id")
         while True:
             targets += [(e["resource"]["resourceType"], e["resource"]["id"]) for e in page.get("entry", [])]
             nxt = next((link["url"] for link in page.get("link", []) if link["relation"] == "next"), None)
             if not nxt:
                 break
-            page = self._check(self.http.get(nxt))
+            page = self._check(await self.http.get(nxt))
         entries = [
             {"request": {"method": "DELETE", "url": f"{rtype}/{rid}"}}
             for rtype, rid in dict.fromkeys(targets)
             if rtype not in SHARED_RESOURCE_TYPES
         ]
-        self.post_bundle({"resourceType": "Bundle", "type": "transaction", "entry": entries})
+        await self.post_bundle({"resourceType": "Bundle", "type": "transaction", "entry": entries})
         return len(entries)
 
-    def meta_delete_tags(self, resource_type: str, rid: str, tags: list[dict[str, str]]) -> None:
+    async def meta_delete_tags(self, resource_type: str, rid: str, tags: list[dict[str, str]]) -> None:
         if not tags:
             return
         params = {"resourceType": "Parameters", "parameter": [{"name": "meta", "valueMeta": {"tag": tags}}]}
-        self._check(self.http.post(f"/{resource_type}/{rid}/$meta-delete", json=params))
+        self._check(await self.http.post(f"/{resource_type}/{rid}/$meta-delete", json=params))
 
 
 def synthea_to_put_transaction(bundle: dict[str, Any], base: str) -> bytes:

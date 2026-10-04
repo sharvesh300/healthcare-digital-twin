@@ -33,6 +33,9 @@ class FakeLoader:
         self.loads += 1
         return list(self.stored[patient_id])
 
+    async def recorded(self, patient_id, since, until):
+        return [r for r in self.stored[patient_id] if since <= r.time <= until]
+
     async def series(self, patient_id, metrics, since, until):
         return {m: sorted((r.time, float(r.value)) for r in self.stored[patient_id]
                           if r.metric == m and since <= r.time <= until) for m in metrics}

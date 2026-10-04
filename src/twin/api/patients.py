@@ -5,6 +5,8 @@
     GET  /patients/{patient_id}/readings        chart points per metric (live + recorded)
     POST /patients/{patient_id}/devices         pair a live device {"kind": "cgm" | "wearable"}
     WS   /ws/patients/{patient_id}/state        snapshot, then a delta per change, heartbeats
+    WS   /ws/patients/{patient_id}/state/replay?start=&end=&speed=&autoplay=
+                                                the recorded twin replayed through the same rules
 
 WebSocket messages (server -> client):
     {"type": "snapshot", "version": 41, "state": {...}}
@@ -12,6 +14,12 @@ WebSocket messages (server -> client):
      "transitions": [{"signal": "glucose", "from": "in_range", "to": "high", ...}]}
     {"type": "heartbeat", "version": 42}
 Client -> server: {"type": "resync"} asks for a fresh snapshot (send it after a version gap).
+Snapshots also carry `series` (glucose and heart-rate points for the charts) and `feed` (recent
+transitions), so a client can rebuild its view from any snapshot.
+
+Replay adds {"type": "replay", "status": "playing" | "paused" | "ended", "cursor", "start", "end",
+"speed"} progress messages and takes {"type": "play" | "pause"}, {"type": "seek", "to": iso},
+{"type": "speed", "value": 120}.
 """
 
 from __future__ import annotations
@@ -29,10 +37,15 @@ from twin.api.deps import ingestor, twin_manager
 from twin.config import settings
 from twin.models import DeviceKind, TwinSignal
 from twin.streaming.manager import PatientTwinStateManager, UnknownPatient
+from twin.streaming.replay import WARMUP, ReplayEngine
 from twin.streaming.store import SqlIngestor
 
 router = APIRouter(tags=["live twin"])
 HEARTBEAT_SECONDS = 20.0
+SNAPSHOT_CHART_HOURS = 24
+FEED_SIZE = 40
+REPLAY_TICK_SECONDS = 0.25
+REPLAY_MAX = timedelta(days=7)
 
 
 async def _require(twin: PatientTwinStateManager, patient_id: UUID) -> dict:
@@ -114,7 +127,8 @@ async def state_stream(ws: WebSocket, patient_id: UUID, twin: PatientTwinStateMa
         async def send_snapshot() -> None:
             nonlocal last
             state = await twin.snapshot(patient_id)
-            await ws.send_json({"type": "snapshot", "version": state["version"], "state": state})
+            await ws.send_json({"type": "snapshot", "version": state["version"], "state": state,
+                                **await _snapshot_context(twin, patient_id, state)})
             last = state["version"]
 
         # One loop waits for the next bus message and the next client message together.
@@ -149,3 +163,92 @@ async def state_stream(ws: WebSocket, patient_id: UUID, twin: PatientTwinStateMa
         finally:
             next_message.cancel()
             next_request.cancel()
+
+
+async def _snapshot_context(twin: PatientTwinStateManager, patient_id: UUID, state: dict) -> dict:
+    """Chart points (24 h up to the latest reading) and recent transitions for a snapshot."""
+    tz = twin.rules.tz
+    times = [state[k]["time"] for k in ("glucose", "heart_rate") if state[k]["time"]]
+    until = max(datetime.fromisoformat(t) for t in times) if times else datetime.now(tz)
+    series = await twin.loader.series(patient_id, ["glucose", "heart_rate"],
+                                      until - timedelta(hours=SNAPSHOT_CHART_HOURS), until)
+    feed = await twin.store.history(patient_id, None, None, FEED_SIZE)
+    return {
+        "series": {m: [[t.astimezone(tz).isoformat(), round(v, 3)] for t, v in pts] for m, pts in series.items()},
+        "feed": [{**r, "time": r["time"].astimezone(tz).isoformat()} for r in feed],
+    }
+
+
+@router.websocket("/ws/patients/{patient_id}/state/replay")
+async def state_replay(ws: WebSocket, patient_id: UUID, start: datetime, end: datetime,
+                       speed: float = Query(120.0, gt=0), autoplay: bool = False,
+                       twin: PatientTwinStateManager = Depends(twin_manager)) -> None:
+    """Replay the recorded twin between start and end through the twin's own state rules, on
+    a clock the viewer drives (play, pause, seek, speed)."""
+    origin = ws.headers.get("origin")
+    if origin and origin not in settings().origins:
+        await ws.close(code=4403)
+        return
+    await ws.accept()
+    try:
+        await twin.patient(patient_id)
+    except UnknownPatient:
+        await ws.send_json({"type": "error", "detail": f"unknown patient {patient_id}"})
+        await ws.close(code=4404)
+        return
+    tz = twin.rules.tz
+    start, end = (t if t.tzinfo else t.replace(tzinfo=tz) for t in (start, end))
+    if not start < end <= start + REPLAY_MAX:
+        await ws.send_json({"type": "error", "detail": "the window must end after it starts and span at most 7 days"})
+        await ws.close(code=4422)
+        return
+
+    engine = ReplayEngine(patient_id, await twin.loader.recorded(patient_id, start - WARMUP, end), start, end,
+                          rules=twin.rules)
+    engine.set_speed(speed)
+    engine.playing = autoplay
+    loop = asyncio.get_running_loop()
+    last = loop.time()
+    next_request = asyncio.ensure_future(ws.receive_text())
+    try:
+        await ws.send_json(engine.seek(start))
+        while True:
+            # While playing, wake every tick to advance the clock; while paused, wake on a
+            # request or for a keep-alive progress message.
+            done, _ = await asyncio.wait({next_request}, timeout=REPLAY_TICK_SECONDS if engine.playing else HEARTBEAT_SECONDS)
+            out: list[dict] = []
+            if next_request in done:
+                try:
+                    request = json.loads(next_request.result())
+                except json.JSONDecodeError:
+                    request = {}
+                next_request = asyncio.ensure_future(ws.receive_text())
+                kind = request.get("type") if isinstance(request, dict) else None
+                if kind == "play" and not engine.playing:
+                    out += engine.play()
+                    last = loop.time()
+                elif kind == "pause" and engine.playing:
+                    out += engine.pause()
+                elif kind == "seek":
+                    try:
+                        to = datetime.fromisoformat(str(request.get("to")))
+                        out.append(engine.seek(to if to.tzinfo else to.replace(tzinfo=tz)))
+                        last = loop.time()
+                    except ValueError:
+                        pass
+                elif kind == "speed":
+                    engine.set_speed(request.get("value", engine.speed))
+                elif kind == "resync":
+                    out.append(engine.seek(engine.cursor))
+            if engine.playing:
+                now = loop.time()
+                out += engine.advance(engine.cursor + timedelta(seconds=(now - last) * engine.speed))
+                last = now
+            out.append(engine.progress())
+            for message in out:
+                await ws.send_json(message)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        next_request.cancel()
+

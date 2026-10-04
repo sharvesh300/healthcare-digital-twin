@@ -56,6 +56,9 @@ class StateLoader(Protocol):
                      until: datetime) -> dict[str, list[tuple[datetime, float]]]:
         """Chart points per metric (live readings plus the recorded history before them)."""
 
+    async def recorded(self, patient_id: UUID, since: datetime, until: datetime) -> list[Reading]:
+        """The recorded (non-live) readings in a window, for a replay."""
+
 
 class TransitionStore(Protocol):
     async def save(self, patient_id: UUID, items: Sequence[Transition], version: int) -> None: ...

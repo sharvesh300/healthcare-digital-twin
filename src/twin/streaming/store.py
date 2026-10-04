@@ -38,12 +38,33 @@ class SqlStateLoader:
         self.rules = rules
 
     async def patient(self, patient_id: UUID) -> dict[str, Any] | None:
-        p = v.patient_summary.c
+        p, w = v.patient_summary.c, v.sensor_window.c
         async with session_scope() as s:
             row = (await s.execute(
                 select(p.patient_id, p.display_name, p.given_name, p.family_name, p.sex, p.age, p.source,
-                       p.source_subject_id, p.tags).where(p.patient_id == patient_id))).mappings().first()
-        return {**row, "patient_id": str(row["patient_id"])} if row else None
+                       p.source_subject_id, p.tags, w.window_start, w.window_end)
+                .select_from(v.patient_summary.outerjoin(v.sensor_window, w.patient_id == p.patient_id))
+                .where(p.patient_id == patient_id))).mappings().first()
+        if not row:
+            return None
+        info = {k: row[k] for k in row.keys() if not k.startswith("window_")}
+        tz = self.rules.tz
+        window = ({"start": row["window_start"].astimezone(tz).isoformat(), "end": row["window_end"].astimezone(tz).isoformat()}
+                  if row["window_start"] else None)
+        return {**info, "patient_id": str(row["patient_id"]), "window": window}
+
+    async def recorded(self, patient_id: UUID, since: datetime, until: datetime) -> list[Reading]:
+        """The recorded twin between since and until, as readings for a replay: the fused CGM,
+        the recorded wearables (beat-level ibi_ms and daily wear_minutes left out) and the
+        sleep stages. Live-simulator data is excluded."""
+        p = {"p": patient_id, "a": since, "b": until}
+        async with session_scope() as s:
+            glucose = (await s.execute(text(_GLUCOSE_RECORDED), p)).all()
+            wearable = (await s.execute(text(_RECORDED_WEARABLE), p)).all()
+            sleep = (await s.execute(text(_RECORDED_SLEEP), p)).all()
+        return ([Reading(t, "glucose", float(g), "mg/dL", "Fused CGM") for t, g in glucose]
+                + [Reading(t, code, float(val), unit, src) for t, code, val, unit, src in wearable]
+                + [Reading(a, "sleep", str(stage), None, src, b) for a, b, stage, src in sleep])
 
     async def readings(self, patient_id: UUID) -> list[Reading]:
         t = v.twin_latest.c
@@ -116,6 +137,20 @@ JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
 JOIN ref.wearable_metric wm ON wm.metric_id = w.metric_id AND wm.code = :m
 WHERE d.patient_id = :p AND {live} AND w.time BETWEEN :a AND :b
 GROUP BY w.time ORDER BY w.time"""
+
+
+_RECORDED_WEARABLE = """
+SELECT w.time, wm.code, w.value, wm.unit, m.manufacturer || ' ' || m.model_name
+FROM ts.wearable_sample w
+JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
+JOIN ref.wearable_metric wm ON wm.metric_id = w.metric_id
+WHERE d.patient_id = :p AND NOT m.is_live_simulator AND wm.code NOT IN ('ibi_ms', 'wear_minutes')
+  AND w.time BETWEEN :a AND :b"""
+_RECORDED_SLEEP = """
+SELECT s.start_time, s.end_time, s.stage, m.manufacturer || ' ' || m.model_name
+FROM ts.sleep_segment s
+JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
+WHERE d.patient_id = :p AND NOT m.is_live_simulator AND s.end_time > :a AND s.start_time <= :b"""
 
 
 # ── transitions ──────────────────────────────────────────────────────

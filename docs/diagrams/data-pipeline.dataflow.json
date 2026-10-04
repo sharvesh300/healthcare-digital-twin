@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "T2D Digital Twin Data Pipeline",
+    "output": "docs/diagrams/data-pipeline.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1068,
+      620
+    ]
+  },
+  "stages": [
+    {
+      "label": "Sources"
+    },
+    {
+      "label": "Ingest"
+    },
+    {
+      "label": "Process"
+    },
+    {
+      "label": "Store"
+    },
+    {
+      "label": "Consume"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cgmacros",
+      "type": "external",
+      "label": "CGMacros",
+      "sublabel": "2 CGMs + Fitbit",
+      "stage": 0,
+      "row": 0,
+      "tag": "real"
+    },
+    {
+      "id": "bigideas",
+      "type": "external",
+      "label": "BIG IDEAs",
+      "sublabel": "Dexcom + E4",
+      "stage": 0,
+      "row": 1,
+      "tag": "real"
+    },
+    {
+      "id": "nhanes",
+      "type": "external",
+      "label": "NHANES",
+      "sublabel": "labs, meds, steps",
+      "stage": 0,
+      "row": 2,
+      "tag": "real"
+    },
+    {
+      "id": "synthea",
+      "type": "external",
+      "label": "Synthea",
+      "sublabel": "EHR cohorts",
+      "stage": 0,
+      "row": 3,
+      "tag": "synthetic"
+    },
+    {
+      "id": "ingest",
+      "type": "backend",
+      "label": "Ingest + match",
+      "sublabel": "composite twins",
+      "stage": 1,
+      "row": 1,
+      "tag": "time-shift"
+    },
+    {
+      "id": "loadehr",
+      "type": "backend",
+      "label": "Load EHR",
+      "sublabel": "PUT bundles",
+      "stage": 1,
+      "row": 3,
+      "tag": "prune"
+    },
+    {
+      "id": "fusion",
+      "type": "backend",
+      "label": "CGM fusion",
+      "sublabel": "Deming + IVW",
+      "stage": 2,
+      "row": 0,
+      "tag": "cgm-fusion-1"
+    },
+    {
+      "id": "generator",
+      "type": "backend",
+      "label": "Wearable sim",
+      "sublabel": "rule-based",
+      "stage": 2,
+      "row": 2,
+      "tag": "synthetic"
+    },
+    {
+      "id": "timescale",
+      "type": "database",
+      "label": "TimescaleDB",
+      "sublabel": "5 schemas",
+      "stage": 3,
+      "row": 1,
+      "tag": "SQLAlchemy"
+    },
+    {
+      "id": "hapi",
+      "type": "database",
+      "label": "HAPI FHIR",
+      "sublabel": "R4 EHR store",
+      "stage": 3,
+      "row": 3,
+      "tag": "FHIR"
+    },
+    {
+      "id": "api",
+      "type": "frontend",
+      "label": "Twin API",
+      "sublabel": "REST + WebSocket",
+      "stage": 4,
+      "row": 1,
+      "tag": "FastAPI"
+    },
+    {
+      "id": "features",
+      "type": "database",
+      "label": "Feature store",
+      "sublabel": "Parquet splits",
+      "stage": 4,
+      "row": 3,
+      "tag": "ml"
+    }
+  ],
+  "flows": [
+    {
+      "id": "cgmacros-sensors",
+      "from": "cgmacros",
+      "to": "ingest",
+      "label": "CGM, HR, labs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "bigideas-sensors",
+      "from": "bigideas",
+      "to": "ingest",
+      "label": "CGM, HR, IBI",
+      "variant": "emphasis",
+      "labelDy": 14
+    },
+    {
+      "id": "nhanes-records",
+      "from": "nhanes",
+      "to": "ingest",
+      "label": "XPT records"
+    },
+    {
+      "id": "synthea-bundles",
+      "from": "synthea",
+      "to": "loadehr",
+      "label": "FHIR bundles",
+      "variant": "dashed"
+    },
+    {
+      "id": "raw-cgm",
+      "from": "ingest",
+      "to": "fusion",
+      "label": "raw CGM",
+      "variant": "emphasis"
+    },
+    {
+      "id": "real-hr",
+      "from": "ingest",
+      "to": "generator",
+      "label": "real HR, profile"
+    },
+    {
+      "id": "fused-glucose",
+      "from": "fusion",
+      "to": "timescale",
+      "label": "fused glucose",
+      "variant": "emphasis"
+    },
+    {
+      "id": "synthetic-channels",
+      "from": "generator",
+      "to": "timescale",
+      "label": "flagged samples",
+      "variant": "dashed"
+    },
+    {
+      "id": "ehr-resources",
+      "from": "loadehr",
+      "to": "hapi",
+      "label": "EHR resources",
+      "variant": "dashed"
+    },
+    {
+      "id": "copy-ehr",
+      "from": "hapi",
+      "to": "timescale",
+      "label": "copy-ehr"
+    },
+    {
+      "id": "report-views",
+      "from": "timescale",
+      "to": "api",
+      "label": "report views",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "ml-export",
+      "from": "timescale",
+      "to": "features",
+      "label": "ml views"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Real sensor path",
+      "items": [
+        "CGMacros and BIG IDEAs supply real CGM and wrist-worn sensor data",
+        "Two-CGM patients are fused onto the Dexcom scale",
+        "NHANES adds a 1,879-person real population for models"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Synthetic, always flagged",
+      "items": [
+        "Synthea supplies EHR history for the 30 composite twins",
+        "The rule-based generator fills sleep, SpO2, respiration, stress and HRV gaps",
+        "Generated rows sit under an is_synthetic device and FHIR tag"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Consumers",
+      "items": [
+        "Twin API serves the per-patient view, timeline and replay",
+        "Feature store exports ml views to Parquet with patient-level splits"
+      ]
+    }
+  ]
+}

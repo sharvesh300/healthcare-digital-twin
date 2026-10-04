@@ -1,7 +1,8 @@
-"""Live sensor feed: replays stored readings over WebSocket at N x real time.
+"""Twin API server: patient list, live sensor replay, and the /twin endpoints.
 
     GET /patients[?tag=composite-patient]   -> patients with their sensor windows
-    WS  /ws/patients/{patient_id}?speed=60&kinds=glucose,activity,meal
+    WS  /ws/patients/{patient_id}?speed=60&kinds=glucose_fused,glucose,activity,medication
+    /twin/...                               -> see twin.api.twin_view
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from uuid import UUID
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, text
 
+from twin.api.twin_view import router as twin_router
 from twin.config import settings
 from twin.db import dispose_engine, engine, session_scope
 from twin.models import Patient
@@ -26,7 +28,8 @@ async def lifespan(_: FastAPI):
     await dispose_engine()
 
 
-app = FastAPI(title="Digital twin sensor replay", lifespan=lifespan)
+app = FastAPI(title="Healthcare digital twin API", lifespan=lifespan)
+app.include_router(twin_router)
 
 
 @app.get("/health")

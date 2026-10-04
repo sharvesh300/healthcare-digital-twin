@@ -3,7 +3,7 @@
 // "glucose.status") are applied immutably, in version order. Glucose and heart-rate points
 // are kept in ring buffers for sparklines and the live tail of the charts.
 
-import type { LiveMessage, Transition, TwinState } from "@/lib/api/types";
+import type { LiveMessage, ReplayProgress, SnapshotMessage, Transition, TwinState } from "@/lib/api/types";
 
 export type Point = { t: number; v: number };
 export type ConnStatus = "connecting" | "live" | "reconnecting" | "offline" | "not_found";
@@ -19,6 +19,8 @@ export interface TwinView {
   series: Record<SeriesKey, Point[]>;
   /** increments each time a signal's status changes: keys one-shot animations */
   pulse: Partial<Record<Transition["signal"], number>>;
+  /** set while viewing a replay: the replay clock and controls' state */
+  replay: ReplayProgress | null;
 }
 
 export interface TwinInit {
@@ -75,7 +77,7 @@ export class TwinStore {
   constructor(init: TwinInit) {
     const series = { glucose: init.series.glucose ?? [], heart_rate: init.series.heart_rate ?? [] };
     const feed = dedupe(init.transitions.map((t) => ({ ...t, id: feedId(t) })));
-    this.view = { state: init.state, status: "connecting", feed, series: extendSeries(series, init.state), pulse: {} };
+    this.view = { state: init.state, status: "connecting", feed, series: extendSeries(series, init.state), pulse: {}, replay: null };
   }
 
   get version(): number {
@@ -98,9 +100,25 @@ export class TwinStore {
     if (status !== this.view.status) this.set({ status });
   }
 
-  snapshot(state: TwinState) {
+  /** A snapshot replaces the state, and the chart buffers and feed when it carries them. */
+  snapshot(msg: Pick<SnapshotMessage, "state" | "series" | "feed" | "replay">) {
     this.awaitingSnapshot = false;
-    this.set({ state, series: extendSeries(this.view.series, state) });
+    const base = msg.series
+      ? {
+          glucose: toPoints(msg.series.glucose),
+          heart_rate: toPoints(msg.series.heart_rate),
+        }
+      : this.view.series;
+    const feed = msg.feed ? dedupe(msg.feed.map((t) => ({ ...t, id: feedId(t) }))) : this.view.feed;
+    const replay = msg.replay ? progressOf(msg.replay) : this.view.replay;
+    this.set({ state: msg.state, series: extendSeries(base, msg.state), feed, replay });
+  }
+
+  setReplay(progress: ReplayProgress) {
+    const r = this.view.replay;
+    if (!r || r.status !== progress.status || r.cursor !== progress.cursor || r.speed !== progress.speed) {
+      this.set({ replay: progressOf(progress) });
+    }
   }
 
   /** Apply a delta. Returns false when a version was missed: the caller asks for a resync. */
@@ -124,6 +142,9 @@ export class TwinStore {
     return true;
   }
 }
+
+const toPoints = (pts: [string, number][] | undefined): Point[] => (pts ?? []).map(([t, v]) => ({ t: Date.parse(t), v }));
+const progressOf = ({ status, cursor, start, end, speed }: ReplayProgress): ReplayProgress => ({ status, cursor, start, end, speed });
 
 function dedupe(items: FeedItem[]): FeedItem[] {
   const seen = new Set<string>();

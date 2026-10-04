@@ -22,10 +22,12 @@ const STRIDE: Record<string, string> = { moderate: "1.15s", vigorous: "0.75s" };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-export function TwinFigure({ state, glucosePulse, now, className }: {
+export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }: {
   state: TwinState;
   glucosePulse: number;
   now: number | null;
+  /** caption while not streaming, instead of "last seen" (e.g. "Replay paused") */
+  pausedLabel?: string;
   className?: string;
 }) {
   const hr = num(state.heart_rate.value);
@@ -257,7 +259,7 @@ export function TwinFigure({ state, glucosePulse, now, className }: {
         >
           {asleep ? <Moon size={13} /> : <Footprints size={13} style={{ color: vital.activity }} />}
           {POSTURE_LABEL[level] ?? statusLabel(level)}
-          {!live && <span className="text-ink-3">· last seen {now ? fmtAge(state.glucose.time ?? state.heart_rate.time, now) : "—"}</span>}
+          {!live && <span className="text-ink-3">· {pausedLabel ?? `last seen ${now ? fmtAge(state.glucose.time ?? state.heart_rate.time, now) : "—"}`}</span>}
         </motion.span>
       </div>
     </div>

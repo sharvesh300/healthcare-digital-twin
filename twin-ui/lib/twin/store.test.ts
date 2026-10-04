@@ -57,7 +57,7 @@ describe("TwinStore", () => {
     expect(store.delta(delta(2, { "glucose.value": 120 }))).toBe(false);
     expect(store.delta(delta(3, { "glucose.value": 130 }))).toBe(true); // ignored, no second resync
     expect(store.getSnapshot().state.glucose.value).toBeNull();
-    store.snapshot(state({ version: 3, glucose: { ...signal, value: 130, trend: null, rate_mg_dl_min: null } }));
+    store.snapshot({ state: state({ version: 3, glucose: { ...signal, value: 130, trend: null, rate_mg_dl_min: null } }) });
     expect(store.delta(delta(4, { "glucose.value": 140 }))).toBe(true);
     expect(store.getSnapshot().state.glucose.value).toBe(140);
   });
@@ -74,6 +74,32 @@ describe("TwinStore", () => {
     const a: Transition = { ...old, time: "2026-10-04T09:10:00-05:00", from: "moderate", to: "light" };
     store.delta(delta(1, {}, [old, a]));
     expect(store.getSnapshot().feed.map((f) => f.time)).toEqual([a.time, old.time]);
+  });
+});
+
+describe("snapshots that carry context", () => {
+  test("series and feed replace the buffers; replay progress is kept", () => {
+    const old: Transition = { signal: "sleep", time: "2026-10-03T23:00:00-05:00", from: "awake", to: "light", value: null };
+    const store = new TwinStore({ state: state(), transitions: [old], series: { glucose: [{ t: 1, v: 99 }] } });
+    const t = "2026-10-04T09:00:00-05:00";
+    store.snapshot({
+      state: state(),
+      series: { glucose: [[t, 140]], heart_rate: [] },
+      feed: [{ signal: "glucose", time: t, from: null, to: "in_range", value: 140 }],
+      replay: { type: "replay", status: "paused", cursor: t, start: t, end: t, speed: 120 },
+    });
+    const v = store.getSnapshot();
+    expect(v.series.glucose).toEqual([{ t: Date.parse(t), v: 140 }]);
+    expect(v.feed.map((f) => f.signal)).toEqual(["glucose"]);
+    expect(v.replay?.status).toBe("paused");
+    store.setReplay({ status: "playing", cursor: t, start: t, end: t, speed: 300 });
+    expect(store.getSnapshot().replay).toEqual({ status: "playing", cursor: t, start: t, end: t, speed: 300 });
+  });
+
+  test("a snapshot without context keeps the buffers", () => {
+    const store = new TwinStore({ state: state(), transitions: [], series: { glucose: [{ t: 1, v: 99 }] } });
+    store.snapshot({ state: state({ version: 2 }) });
+    expect(store.getSnapshot().series.glucose).toEqual([{ t: 1, v: 99 }]);
   });
 });
 

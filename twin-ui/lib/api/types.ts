@@ -55,6 +55,8 @@ export interface PatientInfo {
   source: string;
   source_subject_id: string;
   tags: string[];
+  /** first and last recorded sensor reading (null: no sensors) */
+  window?: { start: string; end: string } | null;
 }
 
 export interface PatientTwin {
@@ -97,8 +99,27 @@ export interface Readings {
   series: Record<string, [string, number][]>;
 }
 
+export interface ReplayProgress {
+  status: "playing" | "paused" | "ended";
+  cursor: string;
+  start: string;
+  end: string;
+  speed: number;
+}
+
+export interface SnapshotMessage {
+  type: "snapshot";
+  version: number;
+  state: TwinState;
+  /** chart points; when present they replace the client's buffers */
+  series?: Record<string, [string, number][]>;
+  /** recent transitions, newest first; when present they replace the feed */
+  feed?: Transition[];
+  replay?: { type: "replay" } & ReplayProgress;
+}
+
 export type LiveMessage =
-  | { type: "snapshot"; version: number; state: TwinState }
+  | SnapshotMessage
   | {
       type: "delta";
       patient_id: string;
@@ -108,6 +129,7 @@ export type LiveMessage =
       transitions: Transition[];
     }
   | { type: "heartbeat"; version: number | null }
+  | ({ type: "replay" } & ReplayProgress)
   | { type: "error"; detail: string };
 
 // /twin/{id}: the full record (only the parts the UI shows are typed).

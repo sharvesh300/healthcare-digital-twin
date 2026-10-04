@@ -12,7 +12,7 @@ const toPoints = (r: Readings, metric: string): Point[] =>
 
 export default async function LiveTwinPage({ params }: PageProps<"/patients/[id]">) {
   const { id } = await params;
-  const { state } = await api.patient(id);
+  const { patient, state } = await api.patient(id);
   // Charts end at the twin's latest reading (a fast replay's device clock runs ahead of now).
   const anchor = [state.glucose.time, state.heart_rate.time].filter(Boolean).sort().at(-1) ?? null;
   const [transitions, readings] = await Promise.all([
@@ -22,6 +22,7 @@ export default async function LiveTwinPage({ params }: PageProps<"/patients/[id]
   return (
     <LiveTwin
       patientId={id}
+      recording={patient.window ?? null}
       init={{
         state,
         transitions,

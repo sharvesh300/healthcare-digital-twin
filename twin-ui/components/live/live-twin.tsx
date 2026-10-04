@@ -1,8 +1,8 @@
 "use client";
 
-import { Activity, Brain, Check, Copy, Droplet, Flame, Footprints, HeartPulse, Moon, Terminal, Thermometer, Waves, Wind, Zap } from "lucide-react";
-import { motion, type Variants } from "motion/react";
-import { useState } from "react";
+import { Activity, Brain, Check, Copy, Droplet, Flame, Footprints, HeartPulse, History, Moon, Radio, Terminal, Thermometer, Waves, Wind, Zap } from "lucide-react";
+import { AnimatePresence, motion, type Variants } from "motion/react";
+import { useMemo, useState } from "react";
 
 import { ChartCard } from "@/components/charts/time-series-chart";
 import { TransitionFeed } from "@/components/feed/transition-feed";
@@ -13,10 +13,11 @@ import type { Signal, TwinState } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fmtAge, fmtNumber, fmtTime, isAsleep, statusLabel, statusTone, tzAbbr } from "@/lib/twin/format";
 import type { TwinInit } from "@/lib/twin/store";
-import { useNow, useTwinStream } from "@/lib/twin/use-twin-stream";
+import { useNow, useTwinStream, type StreamSource } from "@/lib/twin/use-twin-stream";
 import { GLUCOSE_LIMITS, vital } from "@/lib/tokens";
 
 import { ConnectionBadge } from "./connection-badge";
+import { ReplayBar, replayLimit, type ReplayWindow } from "./replay-bar";
 
 const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } } };
 const item: Variants = {
@@ -30,30 +31,99 @@ function deviceTime(s: TwinState): string | null {
   return times.sort().at(-1) ?? null;
 }
 
-export function LiveTwin({ patientId, init }: { patientId: string; init: TwinInit }) {
-  const view = useTwinStream(patientId, init);
-  const now = useNow();
+type Mode = "live" | "replay";
+
+function defaultWindow(recording: ReplayWindow): ReplayWindow {
+  const end = replayLimit(recording);
+  return { start: Math.max(recording.start, end - 6 * 3600_000), end };
+}
+
+/** The twin, live now or replayed: the same components either way, fed by the same protocol. */
+export function LiveTwin({ patientId, init, recording: rec }: {
+  patientId: string;
+  init: TwinInit;
+  recording: { start: string; end: string } | null;
+}) {
+  const recording = useMemo(() => (rec ? { start: Date.parse(rec.start), end: Date.parse(rec.end) } : null), [rec]);
+  const [mode, setMode] = useState<Mode>("live");
+  const [win, setWin] = useState<ReplayWindow | null>(null);
+  const [speed, setSpeed] = useState(120);
+  const [sessionSpeed, setSessionSpeed] = useState(120); // speed a session opens with; later changes are commands
+
+  const source: StreamSource = mode === "replay" && win
+    ? { kind: "replay", start: new Date(win.start).toISOString(), end: new Date(win.end).toISOString(), speed: sessionSpeed, autoplay: false }
+    : { kind: "live" };
+  const { view, send } = useTwinStream(patientId, init, source);
+  const wall = useNow();
+  const replaying = source.kind === "replay";
+  // Ages ("2 min ago") are measured on the clock being watched: the replay's, or the wall's.
+  const now = replaying ? (view.replay ? Date.parse(view.replay.cursor) : null) : wall;
   const s = view.state;
   const device = deviceTime(s);
+
+  const enterReplay = () => {
+    if (!recording) return;
+    setWin((w) => w ?? defaultWindow(recording));
+    setSessionSpeed(speed);
+    setMode("replay");
+  };
+  const changeWindow = (w: ReplayWindow) => {
+    setSessionSpeed(speed);
+    setWin(w);
+  };
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-5">
       <motion.div variants={item} className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <ConnectionBadge status={view.status} streaming={s.streaming} />
+          <div role="radiogroup" aria-label="View" className="flex rounded-control border border-line bg-surface-2 p-0.5">
+            {([["live", "Live now", Radio], ["replay", "Replay", History]] as const).map(([m, label, Icon]) => {
+              const disabled = m === "replay" && !recording;
+              return (
+                <button key={m} role="radio" aria-checked={mode === m} disabled={disabled}
+                  title={disabled ? "No recorded sensor data to replay" : undefined}
+                  onClick={() => (m === "replay" ? enterReplay() : setMode("live"))}
+                  className={cn("relative inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                    mode === m ? "text-ink" : "text-ink-3 hover:text-ink-2")}>
+                  {mode === m && <motion.span layoutId="view-mode" className="absolute inset-0 rounded-[8px] bg-surface shadow-card" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+                  <Icon size={13} className={cn("relative", mode === m && "text-primary")} />
+                  <span className="relative">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {replaying ? (
+            <ReplayBadge status={view.replay?.status ?? null} connected={view.status === "live"} speed={view.replay?.speed ?? speed} />
+          ) : (
+            <ConnectionBadge status={view.status} streaming={s.streaming} />
+          )}
           <span className="text-xs text-ink-3">
-            Device time{" "}
-            <span className="font-mono text-ink-2 tabular-nums">{device ? fmtTime(device, true) : "—"}</span> {device ? tzAbbr(device) : ""}
+            {replaying ? "Replay time" : "Device time"}{" "}
+            <span className="font-mono text-ink-2 tabular-nums">
+              {replaying ? (view.replay ? fmtTime(view.replay.cursor, true) : "—") : device ? fmtTime(device, true) : "—"}
+            </span>{" "}
+            {device ? tzAbbr(device) : ""}
           </span>
         </div>
         <span className="font-mono text-[11px] text-ink-3 tabular-nums" title="Twin state version">v{s.version}</span>
       </motion.div>
 
-      {!s.streaming && view.status !== "not_found" && <motion.div variants={item}><NotStreaming patientId={patientId} lastSeen={device} now={now} /></motion.div>}
+      <AnimatePresence initial={false}>
+        {replaying && recording && win && (
+          <motion.div key="replay-bar" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }} className="overflow-hidden">
+            <ReplayBar recording={recording} window={win} speed={speed} progress={view.replay} ready={view.status === "live"}
+              send={send} onWindow={changeWindow} onSpeed={setSpeed} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!replaying && !s.streaming && view.status !== "not_found" && <motion.div variants={item}><NotStreaming patientId={patientId} lastSeen={device} now={now} /></motion.div>}
 
       <div className="grid grid-cols-12 gap-5">
         <motion.div variants={item} className="col-span-12 lg:col-span-5">
-          <TwinFigure state={s} glucosePulse={view.pulse.glucose ?? 0} now={now} className="lg:sticky lg:top-24" />
+          <TwinFigure state={s} glucosePulse={view.pulse.glucose ?? 0} now={now} className="lg:sticky lg:top-24"
+            pausedLabel={replaying ? (view.replay?.status === "ended" ? "Replay ended" : "Replay paused") : undefined} />
         </motion.div>
 
         <div className="col-span-12 space-y-5 lg:col-span-7">
@@ -120,6 +190,17 @@ export function LiveTwin({ patientId, init }: { patientId: string; init: TwinIni
         <MoreSignals state={s} now={now} />
       </motion.div>
     </motion.div>
+  );
+}
+
+function ReplayBadge({ status, connected, speed }: { status: string | null; connected: boolean; speed: number }) {
+  const playing = status === "playing";
+  return (
+    <span role="status" className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
+      playing ? "border-primary/20 bg-primary-soft text-primary-strong" : "border-line bg-surface text-ink-2")}>
+      <History size={13} className={cn(playing && "animate-spin [animation-direction:reverse] [animation-duration:3s]")} />
+      {!connected ? "Loading replay…" : playing ? `Replaying · ${speed}×` : status === "ended" ? "Replay ended" : "Replay paused"}
+    </span>
   );
 }
 

@@ -440,7 +440,8 @@ twin simulate-stream ──POST /ingest/events──▶ ingestion ──▶ Time
 ```bash
 uv run twin serve                                          # terminal 1 (single worker)
 uv run twin simulate-stream --from-now --speed 60          # terminal 2: all composite patients
-uv run python -m websockets ws://127.0.0.1:8765/ws/patients/<id>/state   # terminal 3: watch one
+bun --cwd twin-ui run dev                                  # terminal 3: the dashboard, http://localhost:3000
+uv run python -m websockets ws://127.0.0.1:8765/ws/patients/<id>/state   # or watch the raw stream
 curl -s http://127.0.0.1:8765/patients/<id>                # current state
 curl -s http://127.0.0.1:8765/patients/<id>/transitions    # what changed, newest first
 uv run twin stream-reset                                   # remove the streamed data afterwards
@@ -491,6 +492,25 @@ Postgres `LISTEN/NOTIFY` behind the same bus interface. Live-simulator readings 
 fusion, FHIR summaries, every `report.*` view except `twin_latest`, and the `ml.*` feature
 store, so streaming never changes research data. The design is in
 [docs/plans/twin-state-streaming.md](docs/plans/twin-state-streaming.md).
+
+### Dashboard (`twin-ui/`)
+
+A Next.js dashboard shows each patient's twin. The **Live** tab has:
+
+- An animated figure. The heart beats at the measured heart rate and the chest breathes at the
+  respiration rate. A glow behind the torso takes the glucose band colour. The posture follows
+  the activity level, and the figure lies down on a bed while asleep.
+- A glucose card with band, trend, a sparkline and today's time in range.
+- Vital-sign cards, glucose and heart-rate charts with a live tail, and a "what changed" feed.
+
+The **History** tab shows the recorded 5-minute series and daily CGM metrics. The **Record** tab
+shows baseline labs, conditions and medications, with synthetic values flagged. **Predict** is
+reserved for the forecast and what-if modules.
+
+The dashboard uses `GET /patients/{id}/readings` (chart points: live readings plus the recorded
+history before them) and the `live` summary in `GET /patients`. The WebSocket accepts browser
+origins from `ALLOWED_ORIGINS`. See [twin-ui/README.md](twin-ui/README.md) and
+[docs/plans/twin-dashboard-ui.md](docs/plans/twin-dashboard-ui.md).
 
 ## Source data notes
 

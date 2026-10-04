@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "twin-api",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "twin", "serve"],
+      "port": 8765
+    },
+    {
+      "name": "twin-ui",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--cwd=/Users/sharveshsivagnanam/development/healthcare-digital-twin/twin-ui", "dev"],
+      "port": 3000
+    }
+  ]
+}

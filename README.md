@@ -15,26 +15,24 @@ an ML feature store, baseline models and a twin API for display and what-if scen
 **Synthetic wearables.** For every composite twin, `simulate-wearables` generates sleep, SpO₂,
 respiration, stress and nightly HRV (where no real HRV exists) with a rule-based generator.
 These channels are stored under a device flagged `is_synthetic`, so they can be displayed and
-alerted on but never mistaken for measurements. See [Synthetic wearables](#synthetic-wearables).
+alerted on but never mistaken for measurements. See [Synthetic wearables](#3-synthetic-wearables).
 
 Every row carries its source, and synthetic values are flagged everywhere. Composite twins
 are for demonstration; ML for treatment or activity effects uses single-source real
 cohorts. The plan is in [docs/plans/t2d-data-integration.md](docs/plans/t2d-data-integration.md).
 
-```
- CGMacros + Synthea        NHANES 2011-14            (ShanghaiT2DM, AI-READI)
-   composite twins       real, cross-sectional
-          \                      |                        /
-           sources/ -> pipeline/ (codes: LOINC, SNOMED, RxNorm/ATC, UCUM)
-                                 |
-     ┌───────────────────────────┴──────────────────────────────┐
- TimescaleDB `twin`: ref / core / ts (hypertables) / report / ml   HAPI FHIR `hapi`
- patients, observations, conditions, medications, encounters,     composite twins'
- devices, CGM (raw + fused), wearables; derived views;            EHR + real labs +
- ML feature store                                                 CGM/HR summaries
-     └───────────────────────────┬──────────────────────────────┘
-        twin API: /twin/{id}, timeline, simulations, WebSocket replay
-```
+![T2D digital twin data pipeline](docs/images/data-pipeline.png)
+
+*Interactive diagram (pan, zoom, trace a flow):
+[docs/diagrams/data-pipeline.html](docs/diagrams/data-pipeline.html). It was made with
+[archify](https://github.com/tt-a1i/archify) from
+[data-pipeline.dataflow.json](docs/diagrams/data-pipeline.dataflow.json).*
+
+**Documentation**
+- [docs/data-dictionary.md](docs/data-dictionary.md) lists every column available for a patient: identity, EHR (every analyte, condition, medication and encounter column), sensors (CGM raw and fused, wearables, sleep), derived views, ML features and vocabularies. Each item is marked real or synthetic per cohort.
+- [How the synthetic data is created](#how-the-synthetic-data-is-created) (below) covers Synthea EHR histories, composite matching, the time shift and the wearable generator.
+- [docs/data-inventory.md](docs/data-inventory.md) is a one-page summary of what the twin has now and what is still to integrate.
+- [docs/plans/t2d-data-integration.md](docs/plans/t2d-data-integration.md) is the phased integration plan.
 
 ## Quick start
 
@@ -91,7 +89,7 @@ src/twin/
   ml/                     feature export, glucose forecaster, population HbA1c model
   api/                    FastAPI app: /patients, /twin/{id}, simulations, WebSocket replay
 tests/
-docs/plans/               the T2D data-integration plan
+docs/                     data dictionary, data inventory, pipeline diagram (diagrams/, images/), plans/
 data/                     downloads, generated cohort, features, models, reports (gitignored)
 ```
 
@@ -120,7 +118,7 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `ingest-nhanes` | NHANES 2011–2014 adults with diabetes (see [NHANES](#nhanes-20112014)): patients, labs, BP, body measures, smoking status, self-reported conditions, prescriptions (RxNorm), and minute-level wrist steps with daily wear minutes. Writes `data/reports/nhanes_report.csv`. |
 | `load-sensors` | Devices, plus native CGM, fingerstick and Fitbit readings (one row per minute and metric in `ts.wearable_sample`), are COPYed into the hypertables. Everything is shifted so the 10-day window starts the day after the patient's last encounter. |
 | `fuse-cgm` | Fuses each patient's Dexcom and Libre into one 5-min stream, `ts.glucose_fused`. The steps are time alignment, cross-calibration and weighted combination (see [CGM fusion](#cgm-fusion)). Fitted parameters go to `core.cgm_calibration`. Writes `data/reports/cgm_fusion_report.csv`. |
-| `simulate-wearables` | **Synthetic.** Sleep stages, SpO₂, respiration, stress and nightly HRV for every composite twin (see [Synthetic wearables](#synthetic-wearables)), under a generator device flagged `is_synthetic`; tags the patient `synthetic-sensors`. |
+| `simulate-wearables` | **Synthetic.** Sleep stages, SpO₂, respiration, stress and nightly HRV for every composite twin (see [Synthetic wearables](#3-synthetic-wearables)), under a generator device flagged `is_synthetic`; tags the patient `synthetic-sensors`. |
 | `reconcile` | Recomputes the GMI tags. Writes the Patient's tags and race/ethnicity, then the real labs (and BMI and LDL derived from them) as the newest Observations, tagged `composite-override`. Writes `data/reports/consistency_report.csv` (HbA1c vs GMI). |
 | `summarize` | Writes Device resources, daily CGM Observations (mean 97507-8, time-in-ranges panel 106793-3, CV 104638-2), whole-window GMI 97506-0 and daily mean heart rate 8867-4, and daily steps 55423-8 where a wearable records them. Codes follow the [HL7 CGM IG](https://build.fhir.org/ig/HL7/cgm/). |
 | `export-features` | Writes the `ml` feature store to `data/features/*.parquet` with `DATASET_CARD.md` (see [ML and simulation](#ml-and-simulation)). |
@@ -128,6 +126,9 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. |
 
 ## Data model (`twin` database)
+
+Every column of every table and view, with real/synthetic availability per cohort, is in
+[docs/data-dictionary.md](docs/data-dictionary.md).
 
 ```
 ref.data_source 1──* core.patient 1──* core.patient_tag *──1 ref.tag
@@ -154,7 +155,7 @@ Every clinical row (`observation`, `condition`, `medication_regimen`, `medicatio
 Views prefer real values over synthetic ones, and derived values carry an `*_is_synthetic` flag.
 
 Schemas: `ref` (vocabularies), `core` (patient master and patient-owned data),
-`ts` (hypertables and continuous aggregates), `report` (derived views).
+`ts` (hypertables and continuous aggregates), `report` (derived views), `ml` (feature views).
 
 The schema is defined in code:
 - **Tables:** the SQLAlchemy 2 ORM models in [src/twin/models/](src/twin/models/), one module per database schema:
@@ -249,28 +250,121 @@ predictions from [PhysioNet](https://physionet.org/content/minute-level-step-cou
 - **Medications** are current prescriptions at the exam. They start `RXDDAYS` before the exam when reported. Generic names are mapped to RxNorm ingredients through `seeds/mappings/medication_names.csv`, which is resolved by the RxNav API.
 - **Steps.** 1,607 people have step data and 1,551 have at least 4 valid days (≥ 10 h worn). Stored are the minutes worn with steps > 0, plus a daily `wear_minutes` value. That averages about 6,400 steps per valid day.
 
-## Synthetic wearables
+## How the synthetic data is created
 
-`twin.synthetic.wearables` (version `twin-wearables-1`) fills the channels no real device
-recorded, Garmin-like:
+No open dataset has continuous sensors **and** an EHR history **and** sleep/SpO₂ for the same
+people. So each composite twin is assembled from three layers. Only the first is real.
 
-| Channel | Rule |
+| Layer | Source | Real or synthetic |
+|---|---|---|
+| 1. Sensors and baseline labs | CGMacros or BIG IDEAs participant | **real** |
+| 2. EHR history: conditions, medications, encounters, years of labs and vitals | a matched Synthea patient | synthetic |
+| 3. Sleep, SpO₂, respiration, stress, nightly HRV | the twin's rule-based generator, driven by layers 1 and 2 | synthetic |
+
+**Never synthesised:** glucose (raw or fused), heart rate, inter-beat intervals, skin
+temperature, EDA, METs and the baseline labs. NHANES patients are entirely real.
+
+### 1. Synthea EHR cohorts
+
+[Synthea](https://github.com/synthetichealth/synthea) simulates whole lives as state machines
+of disease modules: diabetes, hypertension, CKD, medications, encounters, labs and so on. It
+runs on the host (`~/testing/synthea`, unmodified upstream) through
+[seeds/generate_cohort.sh](seeds/generate_cohort.sh). Two cohorts are generated:
+
+| Cohort | For | Command | Settings |
+|---|---|---|---|
+| `data/synthea/` | CGMacros T2D twins | `seeds/generate_cohort.sh` | 150 people, ages 25–75, seed 42, keep module `keep_diabetes.json` (only people with SNOMED 44054006, T2D) |
+| `data/synthea_general/` | BIG IDEAs twins | `COHORT_DIR=synthea_general KEEP_MODULE=none AGES=35-65 POPULATION=200 SEED=43 seeds/generate_cohort.sh` | 200 people, ages 35–65, seed 43, general population (prediabetes and normoglycaemia occur naturally) |
+
+Both cohorts are reproducible:
+- The person seed and clinician seed (`-s`, `-cs`) are fixed.
+- The reference date is fixed (`-r 20261003`, "today" in the EHR timeline).
+- Synthea runs single-threaded (`--generate.thread_pool_size=1`). With threads, it creates different people each run.
+
+The output is FHIR R4 transaction bundles, plus hospital and practitioner bundles. CSV export is off.
+
+### 2. Composite matching and the time shift
+
+Each real participant is paired with one Synthea patient. The pairing is greedy, without
+replacement, and handles the participant with the fewest candidates first:
+
+| | CGMacros (`twin match`) | BIG IDEAs (`twin ingest-bigideas`) |
+|---|---|---|
+| Participants | HbA1c ≥ 6.5 % (14 of 45) | all 16 |
+| Candidate pool | living Synthea diabetics | Synthea general cohort |
+| Hard constraints | same sex; age within ±5 years at the last encounter | same sex; age 35–65 at the last encounter (women 50–65: the study enrolled post-menopausal women); same glycaemic group (HbA1c ≥ 5.7 → Synthea prediabetes without T2D, otherwise neither) |
+| Ranking | nearest latest BMI | nearest latest Synthea HbA1c, then a stable hash tie-break |
+| Audit | `match_age_diff`, `match_bmi_diff`, `data/reports/match_report.csv` | `data/reports/bigideas_report.csv` (BIG IDEAs has no age or BMI) |
+
+The twin takes these fields from the Synthea patient: `patient_id` (the Synthea UUID, which is also the FHIR id), name, MRN, birth date and address. It takes sex (equal by construction) and race/ethnicity from the real participant, when the source reports it.
+
+**Time shift.** The sensor window is moved so it starts on the day after the Synthea patient's last
+encounter. The history then leads up to the sensor days.
+- The shift is a whole number of days, stored once as `core.patient.time_offset`. It keeps wall-clock time, so a 07:30 breakfast stays at 07:30.
+- Times that fall into a DST gap or overlap on the target date are dropped rather than duplicated.
+- The real baseline labs are dated at their real clock time on the shifted collection day.
+
+**Loading the EHR.**
+- `load-ehr` sends only the matched patients' bundles to HAPI FHIR. It rewrites every request to `PUT Type/<synthea-uuid>`, which makes it idempotent.
+- `copy-ehr` copies the history into `core.*` with `source = synthea`. Only LOINC codes in the vocabulary are copied, with units checked. Medication products are mapped to RxNorm ingredients and ATC classes.
+- `reconcile` writes the real labs to FHIR as the newest Observations, tagged `composite-override`, so "latest HbA1c" is always the real value.
+- Synthetic history is never rewritten: an implausible Synthea HbA1c from years ago stays visible as synthetic.
+
+### 3. Synthetic wearables
+
+`twin simulate-wearables` runs [src/twin/synthetic/wearables.py](src/twin/synthetic/wearables.py),
+version `twin-wearables-1`. It fills the Garmin-like channels that no real device recorded.
+
+**Inputs.** Each patient gets a `Profile` built from the patient's own record:
+- age, sex and BMI;
+- sleep apnoea and COPD, from the conditions;
+- dysglycaemia: T2D or prediabetes;
+- whether real inter-beat intervals exist.
+
+The generator also reads the patient's **real per-minute heart rate**, and real activity, which marks exercise minutes (METs ≥ 3 or intensity level ≥ 2). It runs only inside the real recording window.
+
+**Randomness.** There is one random stream per patient, seeded with `sha256("twin-wearables-1/<patient_id>")`. Re-running gives identical data, and a different patient gets different data.
+
+The parameters are rounded, literature-typical values. They were not fitted to data.
+
+| Channel | Cadence | Rule |
+|---|---|---|
+| Sleep duration | per night | hours ~ N(7.2 − 0.015·(age − 40) − 0.3·apnoea, 0.6), clipped to 4.5–9.5 |
+| Bedtime | per night | Candidates are 15-minute steps from 21:00 to 01:30. The generator picks the one where the mean of the **real** HR over the sleep window is lowest, if ≥ 50 % of that window has HR. Otherwise it uses 22:45 − max(age − 40, 0) min + N(0, 40) min. |
+| Sleep stages | per minute → `ts.sleep_segment` | Cycles of N(90, 10) min, clipped to 70–110. The deep share is clip(0.35 − 0.004·(age − 20), 0.12, 0.35), reduced by 25 % per cycle. The REM share is 0.25·min(1, 0.4 + 0.3·cycle), growing through the night; the rest is light. Sleep onset takes 5–20 min (awake). Awakenings ~ Poisson(1.5 + 2.5·apnoea + 0.02·max(age − 40, 0)), each 2–8 min. |
+| SpO₂ baseline | – | Awake baseline: 97.4 − 0.04·max(age − 40, 0) − 0.06·max(BMI − 30, 0) − 2.5·COPD + N(0, 0.4). Asleep: 0.8 lower, and a further 0.3 lower in REM, with noise of 0.5. |
+| SpO₂ desaturations | per minute asleep | The oxygen desaturation index (ODI) is 2/h without apnoea. With apnoea it is 12, 22 or 35 per hour, by BMI (< 30, 30–35, ≥ 35). Events are placed in proportion to stage weights: REM 1.5, light 1.0, deep 0.6. Each event lasts 3 minutes, with depth U(3, 6) points (+2 when severe) scaled by (0.6, 1.0, 0.4). An event pulls SpO₂ *to* a nadir, so overlapping events do not add up. There are at most asleep_minutes / 3 events. Values are rounded and clipped to 70–100. |
+| SpO₂ awake | every 15 min | Spot checks: awake baseline + N(0, 0.6) |
+| Respiration | every worn minute | Awake: 15.5 + 0.06·(HR − resting HR) + N(0, 1). Asleep: light 14.2, deep 13.2, REM 15.0, plus N(0, 0.6), and 2.5 lower during a desaturation. Clipped to 8–30. |
+| Stress | every 3 min awake | 12 + 2·(HR − resting HR) + N(0, 6), clipped to 0–99. Blank while exercising or asleep. Resting HR is the 5th percentile of awake HR. |
+| Nightly HRV (RMSSD) | one value per night, at wake time | ln RMSSD = ln 45 − 0.017·(age − 40) − 0.12·dysglycaemia − 0.10·apnoea + a per-patient offset N(0, 0.15) + a nightly N(0, 0.12). **Only** for patients without real inter-beat intervals: the 16 BIG IDEAs twins keep their real HRV, computed from E4 beats. |
+
+**Checks** ([tests/test_wearable_generator.py](tests/test_wearable_generator.py)):
+- determinism per patient;
+- value ranges;
+- sleep falls where real HR is lowest;
+- apnoea lowers sleeping SpO₂ (mean more than 2 points lower, over 5 % of minutes below 90 %);
+- no HRV is generated when real beats exist.
+
+On the current twins: apnoea patients have ODI 9.3/h against 2.0/h; synthetic RMSSD is about 33 ms against about 42 ms real.
+
+The generator **never overwrites real data** and is **not linked to glucose**, so no
+sleep-to-glucose effect can be "discovered" in it.
+
+### Provenance: how to tell real from synthetic
+
+| Where | Marker |
 |---|---|
-| Sleep | Duration 7.2 h, falling with age and with sleep apnoea. The bedtime is placed where the patient's **real heart rate** is lowest. ~90-minute cycles: deep sleep front-loaded and falling with age, REM growing through the night, awakenings more frequent with apnoea. |
-| SpO₂ | Every minute asleep, every 15 minutes awake. Baseline falls with age, BMI and COPD. Desaturation events occur at ~2 per hour, or 12 / 22 / 35 per hour with mild / moderate / severe apnoea (severity from BMI), more often in REM. An event pulls SpO₂ *to* a nadir. |
-| Respiration | Every worn minute: 12–20 per minute, lower in deep sleep and during desaturations, coupled to real heart rate when awake |
-| Stress | Every 3 minutes awake, from real heart rate above resting; blank during exercise |
-| Nightly HRV (RMSSD) | Age, dysglycaemia and apnoea norms. **Only** for patients without real inter-beat intervals: the BIG IDEAs twins keep their real HRV. |
+| Any EHR row | `source_id` → `ref.data_source.is_synthetic` (`synthea`, `twin_generator` = true) |
+| Sensor samples | `core.device` → `ref.device_model.is_synthetic` (the "Twin generator" model) |
+| Patient | tags `composite-patient`, `synthetic-sensors` (also FHIR `Patient.meta.tag`) |
+| Derived values | `bmi_is_synthetic`, `ldl_is_synthetic`, `egfr_is_synthetic`, `homa_ir_is_synthetic`, `synthetic_analytes` |
+| Views and features | `is_synthetic` (nightly views, regimens, latest observations), `synthetic_metrics` / `synthetic_channels` |
+| FHIR | `composite-override` on real labs; `synthetic-sensors` on generated summaries |
+| API | `GET /twin/{id}` → `provenance.synthetic_analytes`, `provenance.synthetic_sensor_channels` |
 
-The generator is deterministic per patient, never overwrites real data, and is **not linked
-to glucose**, so no sleep-to-glucose effect can be "discovered" in it. Every generated value
-is traceable as synthetic:
-- **Device:** it sits under the twin-generator device, whose model is `is_synthetic`.
-- **Views:** `synthetic_metrics` / `synthetic_channels` list it, and the nightly views carry `is_synthetic`.
-- **FHIR:** it carries the tag `synthetic-sensors`.
-- **Patient:** the patient is tagged `synthetic-sensors`.
-
-**Use it for display, alerts and pipeline testing. Do not use it to train or validate models.**
+**Use synthetic data for display, alerts, replay and pipeline testing. Do not use it to train
+or validate models:** a model would learn the rules written above, not physiology.
 
 ## ML and simulation
 

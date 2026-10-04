@@ -1,0 +1,39 @@
+system,code,display,group_code
+http://snomed.info/sct,274531002,Abnormal findings diagnostic imaging heart+coronary circulat (finding),cardiovascular
+http://snomed.info/sct,401303003,Acute ST segment elevation myocardial infarction (disorder),cardiovascular
+http://snomed.info/sct,401314000,Acute non-ST segment elevation myocardial infarction (disorder),cardiovascular
+http://snomed.info/sct,271737000,Anemia (disorder),anemia
+http://snomed.info/sct,49436004,Atrial fibrillation (disorder),cardiovascular
+http://snomed.info/sct,162864005,Body mass index 30+ - obesity (finding),obesity
+http://snomed.info/sct,88805009,Chronic congestive heart failure (disorder),cardiovascular
+http://snomed.info/sct,431855005,Chronic kidney disease stage 1 (disorder),ckd
+http://snomed.info/sct,431856006,Chronic kidney disease stage 2 (disorder),ckd
+http://snomed.info/sct,433144002,Chronic kidney disease stage 3 (disorder),ckd
+http://snomed.info/sct,431857002,Chronic kidney disease stage 4 (disorder),ckd
+http://snomed.info/sct,44054006,Diabetes mellitus type 2 (disorder),t2d
+http://snomed.info/sct,127013003,Disorder of kidney due to diabetes mellitus (disorder),ckd
+http://snomed.info/sct,46177005,End-stage renal disease (disorder),ckd
+http://snomed.info/sct,59621000,Essential hypertension (disorder),hypertension
+http://snomed.info/sct,399261000,History of coronary artery bypass grafting (situation),cardiovascular
+http://snomed.info/sct,399211009,History of myocardial infarction (situation),cardiovascular
+http://snomed.info/sct,55822004,Hyperlipidemia (disorder),dyslipidemia
+http://snomed.info/sct,302870006,Hypertriglyceridemia (disorder),dyslipidemia
+http://snomed.info/sct,414545008,Ischemic heart disease (disorder),cardiovascular
+http://snomed.info/sct,237602007,Metabolic syndrome X (disorder),metabolic_syndrome
+http://snomed.info/sct,90781000119102,Microalbuminuria due to type 2 diabetes mellitus (disorder),ckd
+http://snomed.info/sct,22298006,Myocardial infarction (disorder),cardiovascular
+http://snomed.info/sct,368581000119106,Neuropathy due to type 2 diabetes mellitus (disorder),neuropathy
+http://snomed.info/sct,1551000119108,Nonproliferative diabetic retinopathy due to type II diabetes mellitus,retinopathy
+http://snomed.info/sct,714628002,Prediabetes (finding),prediabetes
+http://snomed.info/sct,157141000119108,Proteinuria due to type 2 diabetes mellitus (disorder),ckd
+http://snomed.info/sct,38341003,Hypertensive disorder,hypertension
+http://snomed.info/sct,42343007,Congestive heart failure,cardiovascular
+http://snomed.info/sct,53741008,Coronary arteriosclerosis,cardiovascular
+http://snomed.info/sct,194828000,Angina pectoris,cardiovascular
+http://snomed.info/sct,230690007,Cerebrovascular accident,cardiovascular
+http://snomed.info/sct,709044004,Chronic kidney disease,ckd
+http://snomed.info/sct,4855003,Retinopathy due to diabetes mellitus,retinopathy
+http://snomed.info/sct,78275009,Obstructive sleep apnea syndrome (disorder),sleep_apnea
+http://snomed.info/sct,73430006,Sleep apnea (disorder),sleep_apnea
+http://snomed.info/sct,87433001,Pulmonary emphysema (disorder),copd
+http://snomed.info/sct,185086009,Chronic obstructive bronchitis (disorder),copd

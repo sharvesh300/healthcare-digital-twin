@@ -34,6 +34,15 @@ class Settings(BaseSettings):
         return self.data_dir / "synthea" / "fhir"
 
     @property
+    def synthea_general_fhir_dir(self) -> Path:
+        """General-population cohort (ages 35-65) used for the BIG IDEAs composite twins."""
+        return self.data_dir / "synthea_general" / "fhir"
+
+    @property
+    def synthea_fhir_dirs(self) -> list[Path]:
+        return [d for d in (self.synthea_fhir_dir, self.synthea_general_fhir_dir) if d.exists()]
+
+    @property
     def reports_dir(self) -> Path:
         path = self.data_dir / "reports"
         path.mkdir(parents=True, exist_ok=True)

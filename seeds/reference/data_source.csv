@@ -1,2 +1,8 @@
-source_id,code,name,url,license
-1,cgmacros,CGMacros: a scientific dataset for personalized nutrition and diet monitoring,https://physionet.org/content/cgmacros/1.0.0/,Open Data Commons Attribution License v1.0
+source_id,code,name,url,license,is_synthetic,access_tier
+1,cgmacros,CGMacros: a scientific dataset for personalized nutrition and diet monitoring,https://physionet.org/content/cgmacros/1.0.0/,Open Data Commons Attribution License v1.0,false,open
+2,synthea,Synthea synthetic patient generator,https://github.com/synthetichealth/synthea,Apache-2.0,true,generated
+3,nhanes,National Health and Nutrition Examination Survey 2011-2014 (CDC/NCHS),https://wwwn.cdc.gov/nchs/nhanes/,Public domain (US Government),false,open
+4,shanghai_t2dm,"ShanghaiT2DM: CGM, medication and clinical data of type 2 diabetes patients",https://doi.org/10.1038/s41597-023-01940-7,CC BY 4.0,false,open
+5,ai_readi,AI-READI: AI-Ready and Equitable Atlas for Diabetes Insights,https://fairhub.io/datasets/2,AI-READI data use agreement,false,registered
+6,bigideas,BIG IDEAs Glycemic Variability and Wearable Device Data,https://physionet.org/content/big-ideas-glycemic-wearable/1.1.2/,Open Data Commons Attribution License v1.0,false,open
+7,twin_generator,"Rule-based wearable generator of the digital twin (sleep, SpO2, respiration, stress, nightly HRV)",,,true,generated

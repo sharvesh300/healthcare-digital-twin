@@ -1,5 +1,9 @@
-model_id,manufacturer,model_name,kind,specimen,nominal_interval_minutes
-1,Dexcom,G6 Pro,cgm,interstitial,5
-2,Abbott,FreeStyle Libre Pro,cgm,interstitial,15
-3,Ascensia,Contour Next,glucometer,capillary,
-4,Fitbit,Sense,wearable,,1
+model_id,manufacturer,model_name,kind,specimen,nominal_interval_minutes,is_synthetic
+1,Dexcom,G6 Pro,cgm,interstitial,5,false
+2,Abbott,FreeStyle Libre Pro,cgm,interstitial,15,false
+3,Ascensia,Contour Next,glucometer,capillary,,false
+4,Fitbit,Sense,wearable,,1,false
+5,ActiGraph,GT3X+ (wrist),wearable,,1,false
+6,Dexcom,G6,cgm,interstitial,5,false
+7,Empatica,E4,wearable,,,false
+8,Twin generator,Garmin-like wearable (synthetic),wearable,,1,true

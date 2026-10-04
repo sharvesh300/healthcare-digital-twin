@@ -1,18 +1,21 @@
-"""Schema `ts`: raw sensor streams, keyed by device (the device knows its patient).
+"""Schema `ts`: sensor streams (TimescaleDB hypertables, see twin.db.schema.init_db).
 
-These tables become TimescaleDB hypertables in twin.db.schema.init_db.
+Raw readings are keyed by device (the device knows its patient). The fused CGM
+stream combines a patient's devices, so it is keyed by patient.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, SmallInteger
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, SmallInteger, false
 from sqlalchemy.orm import Mapped, mapped_column
 
-from twin.models.base import TIMESTAMPTZ, Base
-from twin.models.patient import Device
+from twin.models.base import TIMESTAMPTZ, Base, FusionSource, SleepStage, pg_enum
+from twin.models.patient import Device, Patient
+from twin.models.reference import WearableMetric
 
 
 class GlucoseReading(Base):
@@ -29,23 +32,53 @@ class GlucoseReading(Base):
     glucose_mg_dl: Mapped[int] = mapped_column(SmallInteger)
 
 
-class FitbitReading(Base):
-    """Fitbit export differs per participant: METs for most, a 0-3 intensity level
-    (sedentary/light/moderate/vigorous) for others. Both are measured, neither derivable."""
+class WearableSample(Base):
+    """One wearable measurement: (device, metric, time) -> value in the metric's unit.
 
-    __tablename__ = "fitbit_reading"
+    Long form because wearables export different metrics (Fitbit: HR, METs or intensity,
+    active kcal; Garmin: steps, HR, SpO2, stress, respiration; ActiGraph: steps).
+    """
+
+    __tablename__ = "wearable_sample"
+    __table_args__ = {"schema": "ts"}
+
+    device_id: Mapped[int] = mapped_column(ForeignKey(Device.device_id, ondelete="CASCADE"), primary_key=True)
+    metric_id: Mapped[int] = mapped_column(SmallInteger, ForeignKey(WearableMetric.metric_id), primary_key=True)
+    time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
+    value: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+
+
+class GlucoseFused(Base):
+    """One glucose estimate per patient every 5 minutes from the calibrated CGMs.
+
+    Derived data (twin.analytics.cgm_fusion), materialised because it depends on fitted
+    parameters (core.cgm_calibration). `censored` marks values pinned at a sensor's
+    40/400 mg/dL reporting limit.
+    """
+
+    __tablename__ = "glucose_fused"
     __table_args__ = (
-        CheckConstraint("heart_rate BETWEEN 25 AND 250", name="heart_rate"),
-        CheckConstraint("mets >= 0", name="mets"),
-        CheckConstraint("activity_level BETWEEN 0 AND 3", name="activity_level"),
-        CheckConstraint("active_kcal >= 0", name="active_kcal"),
-        CheckConstraint("num_nonnulls(heart_rate, mets, activity_level, active_kcal) > 0", name="any_value"),
+        CheckConstraint("glucose_mg_dl BETWEEN 20 AND 600", name="glucose_mg_dl"),
+        {"schema": "ts"},
+    )
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Patient.patient_id, ondelete="CASCADE"), primary_key=True)
+    time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
+    glucose_mg_dl: Mapped[Decimal] = mapped_column(Numeric(5, 1))
+    source: Mapped[FusionSource] = mapped_column(pg_enum(FusionSource, "fusion_source"))
+    censored: Mapped[bool] = mapped_column(server_default=false())
+
+
+class SleepSegment(Base):
+    """A contiguous sleep stage from a wearable (or the twin's wearable generator)."""
+
+    __tablename__ = "sleep_segment"
+    __table_args__ = (
+        CheckConstraint("end_time > start_time", name="positive_duration"),
         {"schema": "ts"},
     )
 
     device_id: Mapped[int] = mapped_column(ForeignKey(Device.device_id, ondelete="CASCADE"), primary_key=True)
-    time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
-    heart_rate: Mapped[int | None] = mapped_column(SmallInteger)
-    mets: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
-    activity_level: Mapped[int | None] = mapped_column(SmallInteger)
-    active_kcal: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))
+    start_time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
+    end_time: Mapped[datetime] = mapped_column(TIMESTAMPTZ)
+    stage: Mapped[SleepStage] = mapped_column(pg_enum(SleepStage, "sleep_stage"))

@@ -1,0 +1,14 @@
+metric_id,code,display,unit,loinc
+1,heart_rate,Heart rate,/min,8867-4
+2,steps,Steps,{steps},55423-8
+3,mets,Metabolic equivalent of task,{MET},
+4,activity_level,Activity intensity level (0 sedentary - 3 vigorous),{level},
+5,active_kcal,Active energy expenditure,kcal,
+6,spo2,Oxygen saturation,%,59408-5
+7,respiration_rate,Respiration rate,/min,9279-1
+8,stress,Stress score,{score},
+9,wear_minutes,"Minutes the device was worn (daily total, stored at day start)",min,
+10,skin_temp,Skin temperature (wrist),Cel,
+11,eda,Electrodermal activity (skin conductance),uS,
+12,ibi_ms,Inter-beat interval,ms,
+13,hrv_rmssd,"Nightly HRV, RMSSD (daily value at wake time)",ms,

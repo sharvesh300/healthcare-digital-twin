@@ -1,0 +1,488 @@
+source,source_name,ingredient,medication_id
+nhanes,55555,55555,
+nhanes,77777,77777,
+nhanes,99999,99999,
+nhanes,ABIRATERONE,abiraterone,1100072
+nhanes,ACARBOSE,acarbose,16681
+nhanes,ACETAMINOPHEN,acetaminophen,161
+nhanes,ACETAZOLAMIDE,acetazolamide,167
+nhanes,ACYCLOVIR,acyclovir,281
+nhanes,ADALIMUMAB,adalimumab,327361
+nhanes,ALBUTEROL,albuterol,435
+nhanes,ALCAFTADINE OPHTHALMIC,alcaftadine,1000082
+nhanes,ALENDRONATE,alendronate,46041
+nhanes,ALFUZOSIN,alfuzosin,17300
+nhanes,ALISKIREN,aliskiren,325646
+nhanes,ALLOPURINOL,allopurinol,519
+nhanes,ALOGLIPTIN,alogliptin,1368001
+nhanes,ALPRAZOLAM,alprazolam,596
+nhanes,AMIODARONE,amiodarone,703
+nhanes,AMITRIPTYLINE,amitriptyline,704
+nhanes,AMLODIPINE,amlodipine,17767
+nhanes,AMMONIUM LACTATE TOPICAL,ammonium lactate,114202
+nhanes,AMOXICILLIN,amoxicillin,723
+nhanes,AMPICILLIN,ampicillin,733
+nhanes,ANASTROZOLE,anastrozole,84857
+nhanes,ANTI-INFECTIVES - UNSPECIFIED,anti-infectives - unspecified,
+nhanes,ANTIDIABETIC AGENTS - UNSPECIFIED,antidiabetic agents - unspecified,
+nhanes,ANTIHYPERLIPIDEMIC AGENTS - UNSPECIFIED,antihyperlipidemic agents - unspecified,
+nhanes,ANTIHYPERTENSIVE AGENTS - UNSPECIFIED,antihypertensive agents - unspecified,
+nhanes,ANTINEOPLASTICS - UNSPECIFIED,antineoplastics - unspecified,
+nhanes,APIXABAN,apixaban,1364430
+nhanes,ARFORMOTEROL,arformoterol,304962
+nhanes,ARIPIPRAZOLE,aripiprazole,89013
+nhanes,ARMODAFINIL,armodafinil,641465
+nhanes,ASPIRIN,aspirin,1191
+nhanes,ATENOLOL,atenolol,1202
+nhanes,ATOMOXETINE,atomoxetine,38400
+nhanes,ATORVASTATIN,atorvastatin,83367
+nhanes,ATROPINE,atropine,1223
+nhanes,AZATHIOPRINE,azathioprine,1256
+nhanes,AZELASTINE NASAL,azelastine,18603
+nhanes,AZELASTINE OPHTHALMIC,azelastine,18603
+nhanes,AZILSARTAN,azilsartan,1091643
+nhanes,AZITHROMYCIN,azithromycin,18631
+nhanes,BACITRACIN,bacitracin,1291
+nhanes,BACITRACIN TOPICAL,bacitracin,1291
+nhanes,BACLOFEN,baclofen,1292
+nhanes,BECLOMETHASONE,beclomethasone,1347
+nhanes,BENAZEPRIL,benazepril,18867
+nhanes,BENZONATATE,benzonatate,18993
+nhanes,BENZOYL PEROXIDE TOPICAL,benzoyl peroxide,1418
+nhanes,BENZTROPINE,benztropine,1424
+nhanes,BESIFLOXACIN OPHTHALMIC,besifloxacin,819911
+nhanes,BETAMETHASONE,betamethasone,1514
+nhanes,BETAMETHASONE TOPICAL,betamethasone,1514
+nhanes,BETAXOLOL OPHTHALMIC,betaxolol,1520
+nhanes,BETHANECHOL,bethanechol,19257
+nhanes,BIMATOPROST OPHTHALMIC,bimatoprost,283810
+nhanes,BISOPROLOL,bisoprolol,19484
+nhanes,BRIMONIDINE,brimonidine,134615
+nhanes,BRIMONIDINE OPHTHALMIC,brimonidine,134615
+nhanes,BRINZOLAMIDE OPHTHALMIC,brinzolamide,194881
+nhanes,BROMOCRIPTINE,bromocriptine,1760
+nhanes,BUDESONIDE,budesonide,19831
+nhanes,BUMETANIDE,bumetanide,1808
+nhanes,BUPROPION,bupropion,42347
+nhanes,BUSPIRONE,buspirone,1827
+nhanes,BUTALBITAL,butalbital,19860
+nhanes,CAFFEINE,caffeine,1886
+nhanes,CALCIUM ACETATE,calcium acetate,214342
+nhanes,CANAGLIFLOZIN,canagliflozin,1373458
+nhanes,CANDESARTAN,candesartan,214354
+nhanes,CAPSAICIN TOPICAL,capsaicin,1992
+nhanes,CAPTOPRIL,captopril,1998
+nhanes,CARBAMAZEPINE,carbamazepine,2002
+nhanes,CARBIDOPA,carbidopa,2019
+nhanes,CARDIOVASCULAR AGENTS - UNSPECIFIED,cardiovascular agents - unspecified,
+nhanes,CARISOPRODOL,carisoprodol,2101
+nhanes,CARVEDILOL,carvedilol,20352
+nhanes,CEFDINIR,cefdinir,25037
+nhanes,CEFUROXIME,cefuroxime,2194
+nhanes,CELECOXIB,celecoxib,140587
+nhanes,CEPHALEXIN,cephalexin,2231
+nhanes,CETIRIZINE,cetirizine,20610
+nhanes,CHLORHEXIDINE TOPICAL,chlorhexidine,2358
+nhanes,CHLOROTHIAZIDE,chlorothiazide,2396
+nhanes,CHLORPHENIRAMINE,chlorpheniramine,2400
+nhanes,CHLORPROMAZINE,chlorpromazine,2403
+nhanes,CHLORPROPAMIDE,chlorpropamide,2404
+nhanes,CHLORTHALIDONE,chlorthalidone,2409
+nhanes,CHOLECALCIFEROL,cholecalciferol,2418
+nhanes,CHOLESTYRAMINE,cholestyramine,2447
+nhanes,CICLESONIDE,ciclesonide,274964
+nhanes,CICLOPIROX TOPICAL,ciclopirox,21090
+nhanes,CILOSTAZOL,cilostazol,21107
+nhanes,CIMETIDINE,cimetidine,2541
+nhanes,CINACALCET,cinacalcet,407990
+nhanes,CIPROFLOXACIN,ciprofloxacin,2551
+nhanes,CIPROFLOXACIN OPHTHALMIC,ciprofloxacin,2551
+nhanes,CITALOPRAM,citalopram,2556
+nhanes,CLAVULANATE,clavulanate,48203
+nhanes,CLINDAMYCIN,clindamycin,2582
+nhanes,CLOBETASOL TOPICAL,clobetasol,2590
+nhanes,CLONAZEPAM,clonazepam,2598
+nhanes,CLONIDINE,clonidine,2599
+nhanes,CLOPIDOGREL,clopidogrel,32968
+nhanes,CLOTRIMAZOLE TOPICAL,clotrimazole,2623
+nhanes,CLOZAPINE,clozapine,2626
+nhanes,CODEINE,codeine,2670
+nhanes,COLCHICINE,colchicine,2683
+nhanes,COLESEVELAM,colesevelam,141626
+nhanes,COLESTIPOL,colestipol,2685
+nhanes,COLLAGENASE TOPICAL,collagenase,58939
+nhanes,CONJUGATED ESTROGENS,conjugated estrogens,4099
+nhanes,CONJUGATED ESTROGENS TOPICAL,conjugated estrogens,4099
+nhanes,CORTICOTROPIN,corticotropin,376
+nhanes,CROMOLYN OPHTHALMIC,cromolyn,42612
+nhanes,CYANOCOBALAMIN,cyanocobalamin,11248
+nhanes,CYCLOBENZAPRINE,cyclobenzaprine,21949
+nhanes,CYCLOSPORINE OPHTHALMIC,cyclosporine,3008
+nhanes,CYPROHEPTADINE,cyproheptadine,3013
+nhanes,DABIGATRAN,dabigatran,1546356
+nhanes,DALFAMPRIDINE,dalfampridine,897018
+nhanes,DAPAGLIFLOZIN,dapagliflozin,1488564
+nhanes,DARIFENACIN,darifenacin,136198
+nhanes,DARUNAVIR,darunavir,460132
+nhanes,DESIPRAMINE,desipramine,3247
+nhanes,DESLORATADINE,desloratadine,275635
+nhanes,DESOGESTREL,desogestrel,22656
+nhanes,DESVENLAFAXINE,desvenlafaxine,734064
+nhanes,DEXAMETHASONE,dexamethasone,3264
+nhanes,DEXLANSOPRAZOLE,dexlansoprazole,816346
+nhanes,DEXTROAMPHETAMINE,dextroamphetamine,3288
+nhanes,DEXTROMETHORPHAN,dextromethorphan,3289
+nhanes,DIAZEPAM,diazepam,3322
+nhanes,DICLOFENAC,diclofenac,3355
+nhanes,DICLOFENAC TOPICAL,diclofenac,3355
+nhanes,DICYCLOMINE,dicyclomine,3361
+nhanes,DIDANOSINE,didanosine,3364
+nhanes,DIFLUPREDNATE OPHTHALMIC,difluprednate,23043
+nhanes,DIGOXIN,digoxin,3407
+nhanes,DILTIAZEM,diltiazem,3443
+nhanes,DIPHENHYDRAMINE,diphenhydramine,3498
+nhanes,DIPHENOXYLATE,diphenoxylate,3500
+nhanes,DIPYRIDAMOLE,dipyridamole,3521
+nhanes,DIURETICS - UNSPECIFIED,diuretics - unspecified,
+nhanes,DIVALPROEX SODIUM,divalproex sodium,40254
+nhanes,DOCUSATE,docusate,82003
+nhanes,DOFETILIDE,dofetilide,49247
+nhanes,DOMPERIDONE,domperidone,3626
+nhanes,DONEPEZIL,donepezil,135447
+nhanes,DORZOLAMIDE,dorzolamide,60207
+nhanes,DORZOLAMIDE OPHTHALMIC,dorzolamide,60207
+nhanes,DOXAZOSIN,doxazosin,49276
+nhanes,DOXEPIN,doxepin,3638
+nhanes,DOXYCYCLINE,doxycycline,3640
+nhanes,DRONEDARONE,dronedarone,233698
+nhanes,DROSPIRENONE,drospirenone,11636
+nhanes,DULOXETINE,duloxetine,72625
+nhanes,DUTASTERIDE,dutasteride,228790
+nhanes,ECONAZOLE TOPICAL,econazole,3743
+nhanes,EMOLLIENTS TOPICAL,emollients,3822
+nhanes,EMTRICITABINE,emtricitabine,276237
+nhanes,ENALAPRIL,enalapril,3827
+nhanes,ENOXAPARIN,enoxaparin,67108
+nhanes,EPINEPHRINE,epinephrine,3992
+nhanes,EPLERENONE,eplerenone,298869
+nhanes,EPOETIN ALFA,epoetin alfa,105694
+nhanes,ERDOSTEINE,erdosteine,24305
+nhanes,ERYTHROMYCIN,erythromycin,4053
+nhanes,ERYTHROMYCIN OPHTHALMIC,erythromycin,4053
+nhanes,ESCITALOPRAM,escitalopram,321988
+nhanes,ESOMEPRAZOLE,esomeprazole,283742
+nhanes,ESTERIFIED ESTROGENS,esterified estrogens,214549
+nhanes,ESTRADIOL,estradiol,4083
+nhanes,ESTRADIOL TOPICAL,estradiol,4083
+nhanes,ESZOPICLONE,eszopiclone,461016
+nhanes,ETANERCEPT,etanercept,214555
+nhanes,ETHINYL ESTRADIOL,ethinyl estradiol,4124
+nhanes,ETODOLAC,etodolac,24605
+nhanes,EXEMESTANE,exemestane,258494
+nhanes,EXENATIDE,exenatide,60548
+nhanes,EZETIMIBE,ezetimibe,341248
+nhanes,FAMOTIDINE,famotidine,4278
+nhanes,FEBUXOSTAT,febuxostat,73689
+nhanes,FELODIPINE,felodipine,4316
+nhanes,FENOFIBRATE,fenofibrate,8703
+nhanes,FENOFIBRIC ACID,fenofibric acid,8703
+nhanes,FENTANYL,fentanyl,4337
+nhanes,FESOTERODINE,fesoterodine,797195
+nhanes,FEXOFENADINE,fexofenadine,87636
+nhanes,FINASTERIDE,finasteride,25025
+nhanes,FLECAINIDE,flecainide,4441
+nhanes,FLUCONAZOLE,fluconazole,4450
+nhanes,FLUDROCORTISONE,fludrocortisone,4452
+nhanes,FLUNISOLIDE NASAL,flunisolide,25120
+nhanes,FLUOCINOLONE TOPICAL,fluocinolone,25126
+nhanes,FLUOCINONIDE TOPICAL,fluocinonide,4462
+nhanes,FLUOXETINE,fluoxetine,4493
+nhanes,FLUPHENAZINE,fluphenazine,4496
+nhanes,FLUTICASONE,fluticasone,41126
+nhanes,FLUTICASONE NASAL,fluticasone,41126
+nhanes,FLUVOXAMINE,fluvoxamine,42355
+nhanes,FORMOTEROL,formoterol,25255
+nhanes,FOSAMPRENAVIR,fosamprenavir,358262
+nhanes,FOSINOPRIL,fosinopril,50166
+nhanes,FUROSEMIDE,furosemide,4603
+nhanes,GABAPENTIN,gabapentin,25480
+nhanes,GATIFLOXACIN OPHTHALMIC,gatifloxacin,228476
+nhanes,GEMFIBROZIL,gemfibrozil,4719
+nhanes,GLATIRAMER,glatiramer,214582
+nhanes,GLICLAZIDE,gliclazide,4816
+nhanes,GLIMEPIRIDE,glimepiride,25789
+nhanes,GLIPIZIDE,glipizide,4821
+nhanes,GLYBURIDE,glyburide,4815
+nhanes,GRANISETRON,granisetron,26237
+nhanes,GUAIFENESIN,guaifenesin,5032
+nhanes,GUANFACINE,guanfacine,40114
+nhanes,HALOPERIDOL,haloperidol,5093
+nhanes,HEPARIN,heparin,5224
+nhanes,HOMATROPINE OPHTHALMIC,homatropine,27084
+nhanes,HYDRALAZINE,hydralazine,5470
+nhanes,HYDROCHLOROTHIAZIDE,hydrochlorothiazide,5487
+nhanes,HYDROCODONE,hydrocodone,5489
+nhanes,HYDROCORTISONE,hydrocortisone,5492
+nhanes,HYDROCORTISONE TOPICAL,hydrocortisone,5492
+nhanes,HYDROMORPHONE,hydromorphone,3423
+nhanes,HYDROXYCHLOROQUINE,hydroxychloroquine,5521
+nhanes,HYDROXYUREA,hydroxyurea,5552
+nhanes,HYDROXYZINE,hydroxyzine,5553
+nhanes,HYOSCYAMINE,hyoscyamine,153970
+nhanes,IBANDRONATE,ibandronate,115264
+nhanes,IBUPROFEN,ibuprofen,5640
+nhanes,ICOSAPENT,icosapent,618597
+nhanes,ILOPERIDONE,iloperidone,73178
+nhanes,IMIPRAMINE,imipramine,5691
+nhanes,INDACATEROL,indacaterol,1114326
+nhanes,INDAPAMIDE,indapamide,5764
+nhanes,INDOMETHACIN,indomethacin,5781
+nhanes,INSULIN,insulin,253182
+nhanes,INSULIN ASPART,insulin aspart,51428
+nhanes,INSULIN ASPART PROTAMINE,insulin aspart protamine,352385
+nhanes,INSULIN DETEMIR,insulin detemir,139825
+nhanes,INSULIN GLARGINE,insulin glargine,274783
+nhanes,INSULIN GLULISINE,insulin glulisine,400008
+nhanes,INSULIN ISOPHANE,insulin isophane,1605101
+nhanes,INSULIN ISOPHANE (NPH),insulin isophane (nph),1605101
+nhanes,INSULIN LISPRO,insulin lispro,86009
+nhanes,INSULIN LISPRO PROTAMINE,insulin lispro protamine,314684
+nhanes,INSULIN REGULAR,insulin regular,253182
+nhanes,INSULIN ZINC,insulin zinc,5866
+nhanes,INTERFERON BETA-1B,interferon beta-1b,72257
+nhanes,IPRATROPIUM,ipratropium,7213
+nhanes,IPRATROPIUM NASAL,ipratropium,7213
+nhanes,IRBESARTAN,irbesartan,83818
+nhanes,ISONIAZID,isoniazid,6038
+nhanes,ISOSORBIDE,isosorbide,6057
+nhanes,ISOSORBIDE DINITRATE,isosorbide dinitrate,6058
+nhanes,ISOSORBIDE MONONITRATE,isosorbide mononitrate,6057
+nhanes,KETOCONAZOLE TOPICAL,ketoconazole,6135
+nhanes,KETOROLAC OPHTHALMIC,ketorolac,35827
+nhanes,LABETALOL,labetalol,6185
+nhanes,LACTIC ACID TOPICAL,lactic acid,114202
+nhanes,LACTULOSE,lactulose,6218
+nhanes,LAMOTRIGINE,lamotrigine,28439
+nhanes,LANSOPRAZOLE,lansoprazole,17128
+nhanes,LATANOPROST OPHTHALMIC,latanoprost,43611
+nhanes,LETROZOLE,letrozole,72965
+nhanes,LEUPROLIDE,leuprolide,42375
+nhanes,LEVALBUTEROL,levalbuterol,237159
+nhanes,LEVETIRACETAM,levetiracetam,114477
+nhanes,LEVOCETIRIZINE,levocetirizine,356887
+nhanes,LEVODOPA,levodopa,6375
+nhanes,LEVOFLOXACIN,levofloxacin,82122
+nhanes,LEVONORGESTREL,levonorgestrel,6373
+nhanes,LEVOTHYROXINE,levothyroxine,10582
+nhanes,LIDOCAINE TOPICAL,lidocaine,6387
+nhanes,LIDOCAINE TOPICAL W PSYLLIUM,lidocaine w psyllium,8928
+nhanes,LINACLOTIDE,linaclotide,1307404
+nhanes,LINAGLIPTIN,linagliptin,1100699
+nhanes,LIOTHYRONINE,liothyronine,10814
+nhanes,LIRAGLUTIDE,liraglutide,475968
+nhanes,LISINOPRIL,lisinopril,29046
+nhanes,LITHIUM,lithium,6448
+nhanes,LOPERAMIDE,loperamide,6468
+nhanes,LORATADINE,loratadine,28889
+nhanes,LORAZEPAM,lorazepam,6470
+nhanes,LOSARTAN,losartan,52175
+nhanes,LOTEPREDNOL OPHTHALMIC,loteprednol,237027
+nhanes,LOVASTATIN,lovastatin,6472
+nhanes,LUBIPROSTONE,lubiprostone,623033
+nhanes,M-BLUE,m-blue,6878
+nhanes,MECLIZINE,meclizine,6676
+nhanes,MEDROXYPROGESTERONE,medroxyprogesterone,6691
+nhanes,MELATONIN,melatonin,6711
+nhanes,MELOXICAM,meloxicam,41493
+nhanes,MEMANTINE,memantine,6719
+nhanes,MESALAMINE,mesalamine,52582
+nhanes,METFORMIN,metformin,6809
+nhanes,METHADONE,methadone,6813
+nhanes,METHENAM,methenam,6832
+nhanes,METHOCARBAMOL,methocarbamol,6845
+nhanes,METHOTREXATE,methotrexate,6851
+nhanes,METHYCLOTHIAZIDE,methyclothiazide,6860
+nhanes,METHYLDOPA,methyldopa,6876
+nhanes,METHYLPHENIDATE,methylphenidate,6901
+nhanes,METHYLPREDNISOLONE,methylprednisolone,6902
+nhanes,METHYLTESTOSTERONE,methyltestosterone,6904
+nhanes,METOCLOPRAMIDE,metoclopramide,6915
+nhanes,METOLAZONE,metolazone,6916
+nhanes,METOPROLOL,metoprolol,6918
+nhanes,METRONIDAZOLE,metronidazole,6922
+nhanes,METRONIDAZOLE TOPICAL,metronidazole,6922
+nhanes,MIGLITOL,miglitol,30009
+nhanes,MILNACIPRAN,milnacipran,588250
+nhanes,MINOCYCLINE,minocycline,6980
+nhanes,MINOXIDIL,minoxidil,6984
+nhanes,MIRTAZAPINE,mirtazapine,15996
+nhanes,MISOPROSTOL,misoprostol,42331
+nhanes,MODAFINIL,modafinil,30125
+nhanes,MOEXIPRIL,moexipril,30131
+nhanes,MOMETASONE,mometasone,108118
+nhanes,MOMETASONE NASAL,mometasone,108118
+nhanes,MOMETASONE TOPICAL,mometasone,108118
+nhanes,MONTELUKAST,montelukast,88249
+nhanes,MORPHINE,morphine,7052
+nhanes,MUPIROCIN TOPICAL,mupirocin,42372
+nhanes,MYCOPHENOLATE MOFETIL,mycophenolate mofetil,68149
+nhanes,NABUMETONE,nabumetone,31448
+nhanes,NADOLOL,nadolol,7226
+nhanes,NAPROXEN,naproxen,7258
+nhanes,NATEGLINIDE,nateglinide,274332
+nhanes,NEBIVOLOL,nebivolol,31555
+nhanes,NEOMYCIN,neomycin,7299
+nhanes,NIACIN,niacin,7393
+nhanes,NIFEDIPINE,nifedipine,7417
+nhanes,NISOLDIPINE,nisoldipine,7435
+nhanes,NITROFURANTOIN,nitrofurantoin,7454
+nhanes,NITROGLYCERIN,nitroglycerin,4917
+nhanes,NORETHINDRONE,norethindrone,7514
+nhanes,NORGESTIMATE,norgestimate,31994
+nhanes,NORTRIPTYLINE,nortriptyline,7531
+nhanes,NYSTATIN TOPICAL,nystatin,7597
+nhanes,OLANZAPINE,olanzapine,61381
+nhanes,OLMESARTAN,olmesartan,321064
+nhanes,OLOPATADINE OPHTHALMIC,olopatadine,135391
+nhanes,OMEGA-3 POLYUNSATURATED FATTY ACIDS,omega-3 polyunsaturated fatty acids,4301
+nhanes,OMEPRAZOLE,omeprazole,7646
+nhanes,ONDANSETRON,ondansetron,26225
+nhanes,ORPHENADRINE,orphenadrine,7715
+nhanes,OXCARBAZEPINE,oxcarbazepine,32624
+nhanes,OXYBUTYNIN,oxybutynin,32675
+nhanes,OXYCODONE,oxycodone,7804
+nhanes,OXYGEN,oxygen,7806
+nhanes,OXYMORPHONE,oxymorphone,7814
+nhanes,PALIPERIDONE,paliperidone,679314
+nhanes,PANCRELIPASE,pancrelipase,6406
+nhanes,PANTOPRAZOLE,pantoprazole,40790
+nhanes,PARICALCITOL,paricalcitol,73710
+nhanes,PAROXETINE,paroxetine,32937
+nhanes,PEGINTERFERON ALFA-2A,peginterferon alfa-2a,120608
+nhanes,PENICILLIN,penicillin,7986
+nhanes,PENICILLIN V POTASSIUM,penicillin v potassium,7984
+nhanes,PENTAERYTHRITOL TETRANITRATE,pentaerythritol tetranitrate,33055
+nhanes,PENTOSAN POLYSULFATE SODIUM,pentosan polysulfate sodium,155046
+nhanes,PENTOXIFYLLINE,pentoxifylline,8013
+nhanes,PERPHENAZINE,perphenazine,8076
+nhanes,PHENAZOPYRIDINE,phenazopyridine,8120
+nhanes,PHENOBARBITAL,phenobarbital,8134
+nhanes,PHENTERMINE,phentermine,8152
+nhanes,PHENYL SALICYLATE,phenyl salicylate,36122
+nhanes,PHENYLEPHRINE,phenylephrine,8163
+nhanes,PHENYTOIN,phenytoin,8183
+nhanes,PILOCARPINE,pilocarpine,8328
+nhanes,PIOGLITAZONE,pioglitazone,33738
+nhanes,PIROXICAM,piroxicam,8356
+nhanes,PITAVASTATIN,pitavastatin,861634
+nhanes,POLYETHYLENE GLYCOL 3350,polyethylene glycol 3350,221147
+nhanes,POLYMYXIN B OPHTHALMIC,polymyxin b,8536
+nhanes,POLYMYXIN B OTIC,polymyxin b,8536
+nhanes,POLYMYXIN B TOPICAL,polymyxin b,8536
+nhanes,POTASSIUM CHLORIDE,potassium chloride,8591
+nhanes,POTASSIUM CITRATE,potassium citrate,54993
+nhanes,PRAMIPEXOLE,pramipexole,746741
+nhanes,PRASUGREL,prasugrel,613391
+nhanes,PRAVASTATIN,pravastatin,42463
+nhanes,PRAZOSIN,prazosin,8629
+nhanes,PREDNISOLONE,prednisolone,8638
+nhanes,PREDNISOLONE OPHTHALMIC,prednisolone,8638
+nhanes,PREDNISONE,prednisone,8640
+nhanes,PREGABALIN,pregabalin,187832
+nhanes,PRIMIDONE,primidone,8691
+nhanes,PROGESTERONE,progesterone,8727
+nhanes,PROMETHAZINE,promethazine,8745
+nhanes,PROPAFENONE,propafenone,8754
+nhanes,PROPOXYPHENE,propoxyphene,8785
+nhanes,PROPRANOLOL,propranolol,8787
+nhanes,PSEUDOEPHEDRINE,pseudoephedrine,8896
+nhanes,PYRIDOSTIGMINE,pyridostigmine,9000
+nhanes,QUETIAPINE,quetiapine,51272
+nhanes,QUINAPRIL,quinapril,35208
+nhanes,QUININE,quinine,9071
+nhanes,RABEPRAZOLE,rabeprazole,114979
+nhanes,RALOXIFENE,raloxifene,72143
+nhanes,RAMIPRIL,ramipril,35296
+nhanes,RANITIDINE,ranitidine,9143
+nhanes,RANOLAZINE,ranolazine,35829
+nhanes,REPAGLINIDE,repaglinide,73044
+nhanes,RIBAVIRIN,ribavirin,9344
+nhanes,RIFAXIMIN,rifaximin,35619
+nhanes,RISEDRONATE,risedronate,73056
+nhanes,RISPERIDONE,risperidone,35636
+nhanes,RITONAVIR,ritonavir,85762
+nhanes,RIVAROXABAN,rivaroxaban,1114195
+nhanes,RIVASTIGMINE,rivastigmine,183379
+nhanes,ROFLUMILAST,roflumilast,1091836
+nhanes,ROPINIROLE,ropinirole,72302
+nhanes,ROSIGLITAZONE,rosiglitazone,84108
+nhanes,ROSUVASTATIN,rosuvastatin,301542
+nhanes,SALMETEROL,salmeterol,36117
+nhanes,SALSALATE,salsalate,36108
+nhanes,SAXAGLIPTIN,saxagliptin,857974
+nhanes,SCOPOLAMINE,scopolamine,9601
+nhanes,SERTRALINE,sertraline,36437
+nhanes,SEVELAMER,sevelamer,214824
+nhanes,SILDENAFIL,sildenafil,136411
+nhanes,SILODOSIN,silodosin,720825
+nhanes,SIMEPREVIR,simeprevir,1482790
+nhanes,SIMVASTATIN,simvastatin,36567
+nhanes,SITAGLIPTIN,sitagliptin,593411
+nhanes,SODIUM BICARBONATE,sodium bicarbonate,36676
+nhanes,SODIUM CHLORIDE,sodium chloride,9863
+nhanes,SODIUM HYALURONATE TOPICAL,sodium hyaluronate,62372
+nhanes,SOFOSBUVIR,sofosbuvir,1484911
+nhanes,SOLIFENACIN,solifenacin,322167
+nhanes,SOTALOL,sotalol,9947
+nhanes,SPIRONOLACTONE,spironolactone,9997
+nhanes,SUCRALFATE,sucralfate,10156
+nhanes,SULFAMETHOXAZOLE,sulfamethoxazole,10180
+nhanes,SULFASALAZINE,sulfasalazine,9524
+nhanes,SULINDAC,sulindac,10237
+nhanes,SUMATRIPTAN,sumatriptan,37418
+nhanes,TACROLIMUS,tacrolimus,42316
+nhanes,TADALAFIL,tadalafil,358263
+nhanes,TAMOXIFEN,tamoxifen,10324
+nhanes,TAMSULOSIN,tamsulosin,77492
+nhanes,TELMISARTAN,telmisartan,73494
+nhanes,TEMAZEPAM,temazepam,10355
+nhanes,TENOFOVIR,tenofovir,117466
+nhanes,TERAZOSIN,terazosin,37798
+nhanes,TERBINAFINE,terbinafine,37801
+nhanes,TESTOSTERONE,testosterone,10379
+nhanes,TETRACYCLINE,tetracycline,10395
+nhanes,THEOPHYLLINE,theophylline,10438
+nhanes,THIOTHIXENE,thiothixene,10510
+nhanes,THYROID DESICCATED,thyroid desiccated,10572
+nhanes,TICLOPIDINE,ticlopidine,10594
+nhanes,TIMOLOL,timolol,10600
+nhanes,TIMOLOL OPHTHALMIC,timolol,10600
+nhanes,TIOTROPIUM,tiotropium,69120
+nhanes,TIZANIDINE,tizanidine,57258
+nhanes,TOLTERODINE,tolterodine,119565
+nhanes,TOPIRAMATE,topiramate,38404
+nhanes,TORSEMIDE,torsemide,38413
+nhanes,TRAMADOL,tramadol,10689
+nhanes,TRANDOLAPRIL,trandolapril,38454
+nhanes,TRAVOPROST OPHTHALMIC,travoprost,283809
+nhanes,TRAZODONE,trazodone,10737
+nhanes,TRIAMCINOLONE NASAL,triamcinolone,10759
+nhanes,TRIAMCINOLONE TOPICAL,triamcinolone,10759
+nhanes,TRIAMTERENE,triamterene,10763
+nhanes,TRIHEXYPHENIDYL,trihexyphenidyl,10811
+nhanes,TRIMETHOPRIM,trimethoprim,10829
+nhanes,UREA TOPICAL,urea,11002
+nhanes,VALACYCLOVIR,valacyclovir,73645
+nhanes,VALGANCICLOVIR,valganciclovir,275891
+nhanes,VALSARTAN,valsartan,69749
+nhanes,VANCOMYCIN,vancomycin,11124
+nhanes,VARDENAFIL,vardenafil,306674
+nhanes,VENLAFAXINE,venlafaxine,39786
+nhanes,VERAPAMIL,verapamil,11170
+nhanes,VILANTEROL,vilanterol,1424884
+nhanes,VILAZODONE,vilazodone,1086769
+nhanes,WARFARIN,warfarin,11289
+nhanes,ZAFIRLUKAST,zafirlukast,114970
+nhanes,ZIPRASIDONE,ziprasidone,115698
+nhanes,ZOLEDRONIC ACID,zoledronic acid,77655
+nhanes,ZOLPIDEM,zolpidem,39993

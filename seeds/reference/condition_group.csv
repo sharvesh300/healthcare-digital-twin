@@ -1,0 +1,16 @@
+group_id,code,display
+1,t2d,Type 2 diabetes
+2,prediabetes,Prediabetes
+3,hypertension,Hypertension
+4,dyslipidemia,Dyslipidaemia
+5,obesity,Obesity
+6,metabolic_syndrome,Metabolic syndrome
+7,ckd,Chronic kidney disease / diabetic kidney disease
+8,retinopathy,Diabetic retinopathy
+9,neuropathy,Diabetic neuropathy
+10,cardiovascular,"Cardiovascular disease (CAD, MI, stroke, HF)"
+11,masld,Fatty liver disease (MASLD)
+12,hypoglycemia,Hypoglycaemia
+13,anemia,Anaemia
+14,sleep_apnea,Sleep apnoea
+15,copd,Chronic obstructive pulmonary disease

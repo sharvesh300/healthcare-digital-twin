@@ -1,23 +1,62 @@
-code_id,loinc,display,ucum_unit
-1,4548-4,Hemoglobin A1c/Hemoglobin.total in Blood,%
-2,1558-6,Fasting glucose [Mass/volume] in Serum or Plasma,mg/dL
-3,20448-7,Insulin [Units/volume] in Serum or Plasma,u[IU]/mL
-4,2093-3,Cholesterol [Mass/volume] in Serum or Plasma,mg/dL
-5,2085-9,Cholesterol in HDL [Mass/volume] in Serum or Plasma,mg/dL
-6,2571-8,Triglyceride [Mass/volume] in Serum or Plasma,mg/dL
-7,29463-7,Body weight,kg
-8,8302-2,Body height,cm
-20,39156-5,Body mass index (BMI) [Ratio],kg/m2
-21,13457-7,Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation,mg/dL
-22,97507-8,Average glucose [Mass/volume] in Interstitial fluid during Reporting Period,mg/dL
-23,97506-0,Glucose management indicator,%
-24,106793-3,Glucose times in ranges panel,%
-25,104642-4,Time in very low range (<54 mg/dL),%
-26,104641-6,Time in low range (54-69 mg/dL),%
-27,97510-2,Time in target range (70-180 mg/dL),%
-28,104640-8,Time in high range (181-250 mg/dL),%
-29,104639-0,Time in very high range (>250 mg/dL),%
-30,104638-2,Glucose coefficient of variation,%
-31,8867-4,Heart rate,/min
-32,99504-3,Glucose [Mass/volume] in Interstitial fluid,mg/dL
-33,41653-7,Glucose [Mass/volume] in Capillary blood by Glucometer,mg/dL
+code_id,loinc,display,analyte,category,value_type,ucum_unit
+1,4548-4,Hemoglobin A1c/Hemoglobin.total in Blood,hba1c,laboratory,numeric,%
+2,1558-6,Fasting glucose [Mass/volume] in Serum or Plasma,glucose_fasting,laboratory,numeric,mg/dL
+3,20448-7,Insulin [Units/volume] in Serum or Plasma,insulin,laboratory,numeric,u[IU]/mL
+4,2093-3,Cholesterol [Mass/volume] in Serum or Plasma,cholesterol_total,laboratory,numeric,mg/dL
+5,2085-9,Cholesterol in HDL [Mass/volume] in Serum or Plasma,hdl,laboratory,numeric,mg/dL
+6,2571-8,Triglyceride [Mass/volume] in Serum or Plasma,triglycerides,laboratory,numeric,mg/dL
+7,29463-7,Body weight,weight,vital-signs,numeric,kg
+8,8302-2,Body height,height,vital-signs,numeric,cm
+20,39156-5,Body mass index (BMI) [Ratio],bmi,vital-signs,numeric,kg/m2
+21,13457-7,Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation,ldl,laboratory,numeric,mg/dL
+22,97507-8,Average glucose [Mass/volume] in Interstitial fluid during Reporting Period,cgm_mean,laboratory,numeric,mg/dL
+23,97506-0,Glucose management indicator,gmi,laboratory,numeric,%
+24,106793-3,Glucose times in ranges panel,cgm_tir_panel,laboratory,numeric,%
+25,104642-4,Time in very low range (<54 mg/dL),cgm_tbr_level2,laboratory,numeric,%
+26,104641-6,Time in low range (54-69 mg/dL),cgm_tbr_level1,laboratory,numeric,%
+27,97510-2,Time in target range (70-180 mg/dL),cgm_tir,laboratory,numeric,%
+28,104640-8,Time in high range (181-250 mg/dL),cgm_tar_level1,laboratory,numeric,%
+29,104639-0,Time in very high range (>250 mg/dL),cgm_tar_level2,laboratory,numeric,%
+30,104638-2,Glucose coefficient of variation,cgm_cv,laboratory,numeric,%
+31,8867-4,Heart rate,heart_rate,vital-signs,numeric,/min
+32,99504-3,Glucose [Mass/volume] in Interstitial fluid,glucose_interstitial,laboratory,numeric,mg/dL
+33,41653-7,Glucose [Mass/volume] in Capillary blood by Glucometer,glucose_capillary,laboratory,numeric,mg/dL
+40,18262-6,Cholesterol in LDL [Mass/volume] in Serum or Plasma by Direct assay,ldl,laboratory,numeric,mg/dL
+41,2089-1,Cholesterol in LDL [Mass/volume] in Serum or Plasma,ldl,laboratory,numeric,mg/dL
+42,2339-0,Glucose [Mass/volume] in Blood,glucose,laboratory,numeric,mg/dL
+43,2345-7,Glucose [Mass/volume] in Serum or Plasma,glucose,laboratory,numeric,mg/dL
+44,1521-4,Glucose [Mass/volume] in Serum or Plasma --2 hours post meal,glucose_2h_postprandial,laboratory,numeric,mg/dL
+45,38483-4,Creatinine [Mass/volume] in Blood,creatinine,laboratory,numeric,mg/dL
+46,2160-0,Creatinine [Mass/volume] in Serum or Plasma,creatinine,laboratory,numeric,mg/dL
+47,33914-3,Glomerular filtration rate [Volume Rate/Area] in Serum or Plasma by Creatinine-based formula (MDRD)/1.73 sq M,egfr_reported,laboratory,numeric,mL/min/{1.73_m2}
+48,98979-8,"Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (CKD-EPI 2021)/1.73 sq M",egfr_reported,laboratory,numeric,mL/min/{1.73_m2}
+49,14959-1,Microalbumin/Creatinine [Mass Ratio] in Urine,uacr,laboratory,numeric,mg/g
+50,9318-7,Albumin/Creatinine [Mass Ratio] in Urine,uacr,laboratory,numeric,mg/g
+51,6299-2,Urea nitrogen [Mass/volume] in Blood,bun,laboratory,numeric,mg/dL
+52,3094-0,Urea nitrogen [Mass/volume] in Serum or Plasma,bun,laboratory,numeric,mg/dL
+53,3084-1,Urate [Mass/volume] in Serum or Plasma,uric_acid,laboratory,numeric,mg/dL
+54,6298-4,Potassium [Moles/volume] in Blood,potassium,laboratory,numeric,mmol/L
+55,2823-3,Potassium [Moles/volume] in Serum or Plasma,potassium,laboratory,numeric,mmol/L
+56,2947-0,Sodium [Moles/volume] in Blood,sodium,laboratory,numeric,mmol/L
+57,2951-2,Sodium [Moles/volume] in Serum or Plasma,sodium,laboratory,numeric,mmol/L
+58,1742-6,Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma,alt,laboratory,numeric,U/L
+59,1920-8,Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma,ast,laboratory,numeric,U/L
+60,2324-2,Gamma glutamyl transferase [Enzymatic activity/volume] in Serum or Plasma,ggt,laboratory,numeric,U/L
+61,1986-9,C peptide [Mass/volume] in Serum or Plasma,c_peptide,laboratory,numeric,ng/mL
+62,95084-0,C peptide [Mass/volume] in Serum or Plasma --2 hours post meal,c_peptide_2h_postprandial,laboratory,numeric,ng/mL
+63,95114-5,Insulin [Units/volume] in Serum or Plasma --2 hours post meal,insulin_2h_postprandial,laboratory,numeric,u[IU]/mL
+64,13873-5,Albumin.glycated/Albumin.total in Serum or Plasma,glycated_albumin,laboratory,numeric,%
+65,30522-7,C reactive protein [Mass/volume] in Serum or Plasma by High sensitivity method,crp_hs,laboratory,numeric,mg/L
+66,33762-6,Natriuretic peptide.B prohormone N-Terminal [Mass/volume] in Serum or Plasma,nt_probnp,laboratory,numeric,pg/mL
+67,67151-1,Troponin T.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method,troponin_t_hs,laboratory,numeric,ng/L
+68,718-7,Hemoglobin [Mass/volume] in Blood,hemoglobin,laboratory,numeric,g/dL
+69,8480-6,Systolic blood pressure,sbp,vital-signs,numeric,mm[Hg]
+70,8462-4,Diastolic blood pressure,dbp,vital-signs,numeric,mm[Hg]
+71,40443-4,Heart rate --resting,heart_rate_resting,vital-signs,numeric,/min
+72,9279-1,Respiratory rate,respiratory_rate,vital-signs,numeric,/min
+73,59408-5,Oxygen saturation in Arterial blood by Pulse oximetry,spo2,vital-signs,numeric,%
+74,55423-8,Number of steps in unspecified time Pedometer,steps,activity,numeric,{steps}
+75,93832-4,Sleep duration,sleep_duration,activity,numeric,min
+76,72166-2,Tobacco smoking status,smoking_status,survey,coded,
+77,71490-7,Left eye Diabetic retinopathy severity level by Ophthalmoscopy,retinopathy_left,exam,coded,
+78,71491-5,Right eye Diabetic retinopathy severity level by Ophthalmoscopy,retinopathy_right,exam,coded,

@@ -1,0 +1,23 @@
+class_id,code,display,atc_prefix,glucose_lowering
+1,biguanide,Biguanides (metformin),A10BA,true
+2,sulfonylurea,Sulfonylureas,A10BB,true
+3,alpha_glucosidase_inhibitor,Alpha-glucosidase inhibitors,A10BF,true
+4,thiazolidinedione,Thiazolidinediones,A10BG,true
+5,dpp4_inhibitor,DPP-4 inhibitors,A10BH,true
+6,glp1_ra,GLP-1 receptor agonists,A10BJ,true
+7,sglt2_inhibitor,SGLT2 inhibitors,A10BK,true
+8,other_glucose_lowering,Other glucose-lowering drugs (incl. glinides),A10BX,true
+10,insulin_rapid,"Insulins, fast-acting",A10AB,true
+11,insulin_intermediate,"Insulins, intermediate-acting",A10AC,true
+12,insulin_premixed,"Insulins, premixed (intermediate + fast)",A10AD,true
+13,insulin_long,"Insulins, long-acting",A10AE,true
+20,statin,Statins (HMG-CoA reductase inhibitors),C10AA,false
+21,ace_inhibitor,ACE inhibitors,C09AA,false
+22,arb,Angiotensin II receptor blockers,C09CA,false
+23,calcium_channel_blocker,Dihydropyridine calcium-channel blockers,C08CA,false
+24,thiazide_diuretic,Thiazide diuretics,C03AA,false
+25,beta_blocker,Selective beta blockers,C07AB,false
+26,antiplatelet,Platelet aggregation inhibitors,B01AC,false
+27,vitamin_k_antagonist,Vitamin K antagonists,B01AA,false
+28,systemic_corticosteroid,Systemic glucocorticoids (raise glucose),H02AB,false
+99,oral_combination,Combinations of oral glucose-lowering drugs (only if no single-drug class),A10BD,true

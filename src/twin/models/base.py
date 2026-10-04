@@ -35,11 +35,54 @@ class DeviceKind(enum.StrEnum):
     wearable = "wearable"
 
 
-class MealType(enum.StrEnum):
-    breakfast = "breakfast"
-    lunch = "lunch"
-    dinner = "dinner"
-    snack = "snack"
+class AccessTier(enum.StrEnum):
+    open = "open"
+    registered = "registered"  # free, after sign-up and agreement
+    controlled = "controlled"  # approved application
+    generated = "generated"  # produced locally (synthetic)
+
+
+class ObservationCategory(enum.StrEnum):
+    laboratory = "laboratory"
+    vital_signs = "vital-signs"
+    activity = "activity"
+    survey = "survey"
+    exam = "exam"
+
+
+class ValueType(enum.StrEnum):
+    numeric = "numeric"
+    coded = "coded"
+
+
+class EncounterClass(enum.StrEnum):
+    ambulatory = "ambulatory"
+    emergency = "emergency"
+    inpatient = "inpatient"
+    virtual = "virtual"
+    home = "home"
+
+
+class SleepStage(enum.StrEnum):
+    awake = "awake"
+    light = "light"
+    deep = "deep"
+    rem = "rem"
+
+
+class LagKind(enum.StrEnum):
+    """How the time difference between two CGMs was interpreted."""
+
+    sensor_lag = "sensor_lag"  # physiological/processing delay (minutes)
+    clock_offset = "clock_offset"  # device clock or time-zone error
+
+
+class FusionSource(enum.StrEnum):
+    """Which calibrated sensor(s) a fused glucose value came from."""
+
+    both = "both"
+    reference_only = "reference_only"
+    secondary_only = "secondary_only"
 
 
 def pg_enum(cls: type[enum.Enum], name: str) -> Enum:

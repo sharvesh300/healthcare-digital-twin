@@ -4,3 +4,5 @@ tag_id,code,display,description
 3,gmi-warn,HbA1c and CGM-derived GMI differ by 0.5-1.0 percentage point,Recomputed by the pipeline from report.consistency
 4,demo-featured,Featured in demo,Assigned manually
 5,needs-review,Needs clinical review,Assigned manually
+6,undiagnosed-diabetes,Diabetes detected by labs only (no prior diagnosis),HbA1c >= 6.5 % or fasting glucose >= 126 mg/dL without a reported diagnosis
+7,synthetic-sensors,Some wearable channels are generated (synthetic),"Sleep, SpO2, respiration, stress and/or nightly HRV produced by the twin's rule-based generator"

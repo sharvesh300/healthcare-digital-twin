@@ -80,3 +80,15 @@ async def copy_records(session: AsyncSession, model, columns: Sequence[str], rec
         table.name, schema_name=table.schema, columns=list(columns), records=rows
     )
     return len(rows)
+
+
+async def upsert(session: AsyncSession, model, rows: list[dict], key: list[str]) -> None:
+    """INSERT ... ON CONFLICT (key) DO UPDATE the remaining columns (DO NOTHING if none),
+    in batches that stay under the bind-parameter limit."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    for start in range(0, len(rows), 1000):
+        stmt = insert(model).values(rows[start:start + 1000])
+        update = {c: stmt.excluded[c] for c in rows[0] if c not in key}
+        await session.execute(stmt.on_conflict_do_update(index_elements=key, set_=update) if update
+                              else stmt.on_conflict_do_nothing(index_elements=key))

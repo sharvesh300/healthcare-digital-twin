@@ -1,10 +1,12 @@
 """ORM models: the single source of truth for the twin database's tables.
 
 One module per database schema:
-  base       declarative Base, shared types, enums (ref.sex, ref.device_kind, ref.meal_type)
-  reference  ref.*   controlled vocabularies (data sources, tags, LOINC codes, device models)
-  patient    core.*  patient master record and patient-owned data (tags, labs, devices, meals)
-  sensors    ts.*    raw sensor readings (TimescaleDB hypertables)
+  base       declarative Base, shared types, enums (schema ref)
+  reference  ref.*   vocabularies (data sources, tags, LOINC codes, concepts, condition groups,
+                     drug classes, RxNorm medications, wearable metrics, device models)
+  patient    core.*  patient master record and patient-owned data (tags, observations,
+                     conditions, medications, encounters, devices, CGM calibration)
+  sensors    ts.*    raw CGM readings, wearable samples and the fused CGM stream (hypertables)
   views      report.* views and ts.* continuous aggregates, read-only (own MetaData)
 
 Conventions
@@ -17,12 +19,53 @@ TimescaleDB objects and the views are created on top of these tables by
 twin.db.schema.init_db.
 """
 
-from twin.models.base import Base, DeviceKind, MealType, Sex
-from twin.models.patient import Device, LabResult, Meal, MealPhoto, Patient, PatientTag
-from twin.models.reference import DataSource, DeviceModel, ObservationCode, Tag
-from twin.models.sensors import FitbitReading, GlucoseReading
+from twin.models.base import (
+    AccessTier,
+    Base,
+    DeviceKind,
+    EncounterClass,
+    FusionSource,
+    LagKind,
+    ObservationCategory,
+    Sex,
+    SleepStage,
+    ValueType,
+)
+from twin.models.patient import (
+    CgmCalibration,
+    Condition,
+    Device,
+    Encounter,
+    MedicationDose,
+    MedicationRegimen,
+    Observation,
+    Patient,
+    PatientTag,
+)
+from twin.models.reference import (
+    Concept,
+    ConditionGroup,
+    DataSource,
+    DeviceModel,
+    DrugClass,
+    Medication,
+    MedicationAtc,
+    MedicationProduct,
+    ObservationCode,
+    Tag,
+    WearableMetric,
+)
+from twin.models.sensors import (
+    GlucoseFused,
+    GlucoseReading,
+    SleepSegment,
+    WearableSample,
+)
 
 __all__ = [
-    "Base", "DataSource", "Device", "DeviceKind", "DeviceModel", "FitbitReading", "GlucoseReading",
-    "LabResult", "Meal", "MealPhoto", "MealType", "ObservationCode", "Patient", "PatientTag", "Sex", "Tag",
+    "AccessTier", "Base", "CgmCalibration", "Concept", "Condition", "ConditionGroup", "DataSource", "Device",
+    "DeviceKind", "DeviceModel", "DrugClass", "Encounter", "EncounterClass", "FusionSource", "GlucoseFused",
+    "GlucoseReading", "LagKind", "Medication", "MedicationAtc", "MedicationDose", "MedicationProduct",
+    "MedicationRegimen", "Observation", "ObservationCategory", "ObservationCode", "Patient", "PatientTag", "Sex",
+    "SleepSegment", "SleepStage", "Tag", "ValueType", "WearableMetric", "WearableSample",
 ]

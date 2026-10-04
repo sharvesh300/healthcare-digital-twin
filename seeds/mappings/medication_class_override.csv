@@ -1,0 +1,2 @@
+medication_id,drug_class_code,reason
+1605101,insulin_intermediate,"insulin isophane (NPH) is intermediate-acting (ATC A10AC); RxClass returns no ATC class for this ingredient code"

@@ -111,3 +111,53 @@ export function statusTone(signal: SignalKey | Transition["signal"], status: str
 export const deviceName = (source: string | null | undefined) => source?.replace(/^Twin (simulator|generator) /, "") ?? null;
 
 export const isAsleep = (stage: string | null | undefined) => stage === "light" || stage === "deep" || stage === "rem";
+
+// ── clinic-zone date-time inputs (<input type="datetime-local"> holds a zone-less "YYYY-MM-DDTHH:mm") ──
+
+const partsFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TWIN_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function zoneParts(ms: number): Record<string, number> {
+  return Object.fromEntries(
+    partsFmt.formatToParts(new Date(ms)).filter((p) => p.type !== "literal").map((p) => [p.type, Number(p.value)]),
+  );
+}
+
+/** Offset of the clinic zone from UTC at `ms`, in ms (e.g. −5 h in CDT). */
+function zoneOffset(ms: number): number {
+  const p = zoneParts(ms);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(ms / 1000) * 1000;
+}
+
+/** A time as a datetime-local value in the clinic zone. */
+export function toZonedInput(t: number | string): string {
+  const p = zoneParts(typeof t === "number" ? t : Date.parse(t));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+/** A datetime-local value read as clinic time; null if incomplete. Correct across DST changes. */
+export function fromZonedInput(value: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!m) return null;
+  const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const first = guess - zoneOffset(guess);
+  return guess - zoneOffset(first);
+}
+
+/** "3 h", "1 h 30 min", "45 min", "18 s" */
+export function fmtSpan(ms: number): string {
+  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))} s`;
+  const min = Math.round(ms / 60_000);
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+}

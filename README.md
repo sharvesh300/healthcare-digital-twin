@@ -53,6 +53,7 @@ scripts/pipeline.sh                       # uv run twin all: init-db + every loa
 uv run twin export-features               # ML feature store -> data/features/*.parquet
 uv run twin train-baselines               # glucose forecaster + HbA1c population model -> data/models/
 scripts/replay.sh                         # twin API on http://localhost:8765 (docs at /docs)
+scripts/stream.sh --from-now              # (second terminal) simulated devices stream into the live twin
 ```
 
 `scripts/pipeline.sh <step>` runs a single step, for example `scripts/pipeline.sh reconcile`.
@@ -74,7 +75,8 @@ seeds/                    everything the databases are seeded from
                           reviewed drug-class overrides
   build_medication_seeds.py  RxNorm/ATC seed builder (RxNav API)
   download_cgmacros.sh, fetch_cgmacros.py, generate_cohort.sh, download_nhanes.sh
-scripts/                  running the system: up.sh, pipeline.sh, replay.sh (API), reset.sh
+scripts/                  running the system: up.sh, pipeline.sh, replay.sh (API), stream.sh (device
+                          simulator), reset.sh
 db/init/                  Docker init: creates HAPI's database
 src/twin/
   cli.py, config.py       `twin` command and settings
@@ -87,7 +89,10 @@ src/twin/
   pipeline/               load steps: patients, bigideas, ehr (load/copy), sensors, nhanes, fusion, simulate,
                           reconcile, summaries
   ml/                     feature export, glucose forecaster, population HbA1c model
-  api/                    FastAPI app: /patients, /twin/{id}, simulations, WebSocket replay
+  streaming/              live twin: event models, twin state + rules, PatientTwinStateManager, event
+                          bus, database side, device simulator
+  api/                    FastAPI app: /patients, /patients/{id} (live twin), /ingest/events, /twin/{id},
+                          simulations, WebSockets (live state, history replay)
 tests/
 docs/                     data dictionary, data inventory, pipeline diagram (diagrams/, images/), plans/
 data/                     downloads, generated cohort, features, models, reports (gitignored)
@@ -98,6 +103,7 @@ data/                     downloads, generated cohort, features, models, reports
 | TimescaleDB / Postgres | `postgresql://twin:…@localhost:${PG_PORT}/twin` |
 | HAPI FHIR R4 | http://localhost:8080/fhir |
 | Twin API | http://localhost:8765/docs, `/twin/{patient_id}`, `ws://localhost:8765/ws/patients/{patient_id}?speed=60` |
+| Live twin | `/patients/{patient_id}`, `ws://localhost:8765/ws/patients/{patient_id}/state`, `POST /ingest/events` |
 
 `seeds/generate_cohort.sh` reads `SYNTHEA_DIR` (default `~/testing/synthea`),
 `POPULATION` (150), `SEED` (42) and `REFERENCE_DATE` (`20261003`). The same values
@@ -123,7 +129,9 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `summarize` | Writes Device resources, daily CGM Observations (mean 97507-8, time-in-ranges panel 106793-3, CV 104638-2), whole-window GMI 97506-0 and daily mean heart rate 8867-4, and daily steps 55423-8 where a wearable records them. Codes follow the [HL7 CGM IG](https://build.fhir.org/ig/HL7/cgm/). |
 | `export-features` | Writes the `ml` feature store to `data/features/*.parquet` with `DATASET_CARD.md` (see [ML and simulation](#ml-and-simulation)). |
 | `train-baselines` | Trains the glucose forecaster and the NHANES HbA1c model from the exported features, into `data/models/`. |
-| `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. |
+| `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. The live twin: `GET /patients/{id}`, `WS /ws/patients/{id}/state`, `POST /ingest/events` (see [Live twin](#live-twin)). One worker. |
+| `simulate-stream` | Not a pipeline step. Acts as the patients' devices: replays recorded CGM, wearable and sleep data as live readings into the running API (see [Live twin](#live-twin)). |
+| `stream-reset` | Deletes the live-simulator devices with their readings, and the recorded twin transitions. |
 
 ## Data model (`twin` database)
 
@@ -148,6 +156,8 @@ ref.data_source 1──* core.patient 1──* core.patient_tag *──1 ref.tag
                                   ├──* ts.wearable_sample   (hypertable) *──1 ref.wearable_metric
                                   └──* ts.sleep_segment     (stage intervals)
    ref.device_model.is_synthetic marks generator devices: their samples are synthetic
+   ref.device_model.is_live_simulator marks live-stream devices: only the live twin reads them
+core.patient 1──* ts.twin_state_transition (hypertable: status changes the live twin published)
 ```
 
 Every clinical row (`observation`, `condition`, `medication_regimen`, `medication_dose`,
@@ -407,6 +417,80 @@ The twin API (`twin serve`, docs at `/docs`):
 - **SGLT2 inhibitor:** adding one raises the predicted HbA1c (+0.1 %), although SGLT2 inhibitors lower HbA1c. This is confounding by indication.
 
 So the simulation endpoints demonstrate the twin's interface. They are not a basis for treatment or lifestyle advice. Causal what-ifs need either within-person data where the intervention varies (ShanghaiT2DM doses, trials) or explicit causal methods, and meal data for glucose.
+
+## Live twin
+
+The twin also runs live. A simulated device streams readings, the API stores them, and each
+patient's **twin state** (latest glucose with band and trend, heart rate, activity level, steps
+today, sleep stage, SpO₂, respiration, HRV, skin temperature, stress, EDA) updates and is pushed
+to every client watching that patient over a WebSocket.
+
+```
+twin simulate-stream ──POST /ingest/events──▶ ingestion ──▶ TimescaleDB (ts.*)
+                                                  │ new readings, after commit
+                                                  ▼
+                 report.twin_latest ──load──▶ PatientTwinStateManager ──▶ ts.twin_state_transition
+                                              apply → update → publish
+                                                  ▼
+                                    event bus (in-process, per patient)
+                                                  ▼
+                       WS /ws/patients/{id}/state      GET /patients/{id}
+```
+
+```bash
+uv run twin serve                                          # terminal 1 (single worker)
+uv run twin simulate-stream --from-now --speed 60          # terminal 2: all composite patients
+uv run python -m websockets ws://127.0.0.1:8765/ws/patients/<id>/state   # terminal 3: watch one
+curl -s http://127.0.0.1:8765/patients/<id>                # current state
+curl -s http://127.0.0.1:8765/patients/<id>/transitions    # what changed, newest first
+uv run twin stream-reset                                   # remove the streamed data afterwards
+```
+
+- **Simulator** ([streaming/simulator.py](src/twin/streaming/simulator.py)). It pairs a live
+  CGM and a live wearable per patient (`POST /patients/{id}/devices`) and replays the patient's
+  recording: the fused CGM stream, the wearable samples and the sleep stages.
+  - `--speed` sets the device clock against the wall clock; 1 is real time.
+  - `--from-now` starts at the present moment of the recording. Twin time spans today for most
+    patients, so at `--speed 1` the stream continues the patient's history exactly.
+  - `--jitter`, `--drop-rate`, `--late-rate` and `--loop` add noise, lost readings,
+    out-of-order backfill, and endless playback.
+- **Ingestion** (`POST /ingest/events`). Batches of `glucose`, `wearable` and `sleep` events are
+  validated, written with `INSERT … ON CONFLICT DO NOTHING RETURNING`, and only the readings that
+  were new are applied to the twin, after the commit. Re-sending a batch is safe. Only
+  live-simulator devices are accepted, so the recorded devices stay exactly as the pipeline
+  loaded them.
+- **Twin state** ([streaming/state.py](src/twin/streaming/state.py)). A pure reducer: one reading
+  in, the next state out.
+  - **Glucose bands:** `very_low` < 54, `low` < 70, `in_range` 70–180, `high` ≤ 250,
+    `very_high`.
+  - **Glucose trend:** the 15-minute slope, from `falling_fast` to `rising_fast`.
+  - **Other bands:** heart rate, SpO₂, and the activity level (from METs or the intensity code).
+  - **Steps today** reset at local midnight. The sleep stage ends at its `until`.
+  - **Staleness:** a signal is marked `stale` when it has had no reading for 15 min (glucose) or
+    10 min (heart rate) of *device* time. The manager learns the device clock's rate, so a 60×
+    stream goes stale after 15 s of silence.
+  - A late reading never replaces a newer value, but it still counts for the trend and steps.
+  - These are display bands, not alerts or clinical advice.
+- **PatientTwinStateManager** ([streaming/manager.py](src/twin/streaming/manager.py)).
+  - `load` builds the state from `report.twin_latest` (the latest reading per metric; live
+    devices win, otherwise the latest at or before now).
+  - `apply` computes the delta.
+  - `update` bumps the version and records the status changes in `ts.twin_state_transition`.
+  - `publish` sends the delta on the bus.
+  - `handle` runs all four under a per-patient lock, one delta per ingested batch.
+  - A background tick runs staleness checks, ends `streaming` after 60 s without data, and
+    evicts idle, unwatched states.
+- **WebSocket** (`/ws/patients/{id}/state`). It sends a `snapshot` on connect, then `delta`s
+  (`version`, `changes` as flat paths like `glucose.status`, `transitions`), and a `heartbeat`
+  every 20 s. Versions are sequential. After a gap, the client sends `{"type": "resync"}` and
+  gets a new snapshot. A slow client is resynced instead of slowing ingestion.
+
+The state is derived and kept in memory; restarting the API rebuilds it from the database (the
+version restarts at 0). The in-process bus needs **one uvicorn worker**. Scaling out would put
+Postgres `LISTEN/NOTIFY` behind the same bus interface. Live-simulator readings are excluded from
+fusion, FHIR summaries, every `report.*` view except `twin_latest`, and the `ml.*` feature
+store, so streaming never changes research data. The design is in
+[docs/plans/twin-state-streaming.md](docs/plans/twin-state-streaming.md).
 
 ## Source data notes
 

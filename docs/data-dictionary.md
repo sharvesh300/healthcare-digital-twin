@@ -254,6 +254,12 @@ Device models:
 | Empatica | E4 | wearable | – | – | no | BIG IDEAs |
 | ActiGraph | GT3X+ (wrist) | wearable | – | 1 min | no | NHANES |
 | Twin generator | Garmin-like wearable (synthetic) | wearable | – | 1 min | **yes** | all 30 composites |
+| Twin simulator | Live CGM (simulated) | cgm | interstitial | 5 min | **yes**, live | `twin simulate-stream` |
+| Twin simulator | Live wearable (simulated) | wearable | – | 1 min | **yes**, live | `twin simulate-stream` |
+
+Live-simulator models (`is_live_simulator`) carry readings streamed into the live twin. Only
+`report.twin_latest` reads them; fusion, FHIR summaries, every other `report.*` view and the `ml.*`
+feature store leave them out. `twin stream-reset` deletes these devices and their readings.
 
 ### 3.2 Glucose
 
@@ -335,7 +341,21 @@ The secondary columns are either all null or all set.
 
 Sleep segments are **S** for all 30 composite twins (6,310 segments). No source cohort recorded sleep.
 
-### 3.5 Continuous aggregates (`ts.*`, real-time)
+### 3.5 Live twin: `ts.twin_state_transition` (hypertable)
+
+A status change the live twin published (twin.streaming). The readings that caused it are in the
+tables above.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `patient_id` | uuid → `core.patient` | |
+| `signal` | enum | `glucose` (band), `glucose_trend`, `heart_rate` (band), `activity` (level), `sleep` (stage), `spo2` (band) |
+| `time` | timestamptz | Device time of the reading, or of the staleness check, that caused the change |
+| `from_status`, `to_status` | text | For example `in_range` → `high`, `normal` → `stale`. `from_status` is null for the first status |
+| `value` | numeric | The signal's value at the change |
+| `state_version` | bigint | The twin state version that published it (restarts when the API restarts) |
+
+### 3.6 Continuous aggregates (`ts.*`, real-time)
 
 | Aggregate | Columns |
 |---|---|
@@ -366,7 +386,8 @@ These views are read-only and computed on demand. They prefer real values over s
 | `spo2_nightly` | patient × night | patient_id, night, sleep_minutes, spo2_mean, spo2_min, t90_pct, odi_per_hour, is_synthetic |
 | `hrv_nightly` | patient × night | patient_id, night, rmssd_ms, beats, is_synthetic (real = RMSSD of artefact-free `ibi_ms` beats before 05:00, ≥ 300 beats) |
 | `sensor_window` | patient | patient_id, window_start, window_end (real devices only) |
-| `replay_stream` | event | patient_id, time, kind (`glucose`, `glucose_fused`, `activity`, `sleep`, `medication`), source, payload (jsonb) |
+| `replay_stream` | event | patient_id, time, kind (`glucose`, `glucose_fused`, `activity`, `sleep`, `medication`), source, payload (jsonb). Recorded devices only |
+| `twin_latest` | patient × metric | patient_id, device_id, metric (`glucose`, `sleep` or a wearable metric code), time, value_num, value_text (sleep stage), until, unit, source, is_live. Live-simulator readings win; otherwise the latest at or before now. Glucose comes from the fused stream unless a live CGM has data |
 
 ---
 
@@ -431,7 +452,7 @@ Every table has a `split` column (`train`, `val` or `test`): a hash of `patient_
 | `ref.medication_atc` | medication_id, atc4 | 703 |
 | `ref.medication_product` | product_rxcui, medication_id, display, strength_value, strength_unit | 188 |
 | `ref.wearable_metric` | metric_id, code, display, unit, loinc | 13 |
-| `ref.device_model` | model_id, manufacturer, model_name, kind (`cgm` / `glucometer` / `wearable`), specimen, nominal_interval, is_synthetic | 8 |
+| `ref.device_model` | model_id, manufacturer, model_name, kind (`cgm` / `glucometer` / `wearable`), specimen, nominal_interval, is_synthetic, is_live_simulator | 10 |
 
 The seeds are in [seeds/reference/](../seeds/reference/) and the mappings in [seeds/mappings/](../seeds/mappings/).
 

@@ -236,10 +236,52 @@ def train_baselines() -> None:
 
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
-    """Serve the twin API: /patients, /twin/{id} (+timeline, simulations), WebSocket replay."""
+    """Serve the twin API: /patients, /patients/{id} (live twin), /twin/{id} (+timeline, simulations),
+    /ingest/events and the WebSockets. One worker: the live twin state is kept in this process."""
     from twin.api.replay import serve as run
 
     run(host, port)
+
+
+@app.command("simulate-stream")
+def simulate_stream(
+    patient: list[str] = typer.Option([], help="patient id (repeatable); default: every patient with --tag"),
+    tag: str = typer.Option("composite-patient", help="stream every patient with this tag"),
+    api: str = typer.Option("http://127.0.0.1:8765", help="twin API base URL (`twin serve`)"),
+    speed: float = typer.Option(60.0, min=0.01, help="device-clock multiplier; 1 = real time"),
+    tick: float = typer.Option(1.0, min=0.05, help="seconds between batches"),
+    loop: bool = typer.Option(False, help="restart each recording when it ends"),
+    jitter: float = typer.Option(0.0, min=0, help="relative noise on glucose and heart rate, e.g. 0.02"),
+    drop_rate: float = typer.Option(0.0, min=0, max=1, help="share of readings lost"),
+    late_rate: float = typer.Option(0.0, min=0, max=1, help="share of readings sent one batch late"),
+    skip_hours: float = typer.Option(0.0, min=0, help="start this many hours into each recording"),
+    from_now: bool = typer.Option(False, help="start each recording at the present (twin time = now)"),
+    duration: float | None = typer.Option(None, min=0, help="stop after this many wall-clock seconds"),
+    metric: list[str] = typer.Option([], help="wearable metric code to send (repeatable); default: all"),
+    seed: int | None = typer.Option(None, help="random seed for the knobs"),
+) -> None:
+    """Act as the patients' devices: replay recorded CGM, wearable and sleep data as live readings
+    into POST /ingest/events (start `twin serve` first)."""
+    from uuid import UUID
+
+    from twin.streaming.simulator import run_stream
+
+    _run(lambda: run_stream(api, [UUID(p) for p in patient], tag, speed=speed, tick=tick, loop=loop, jitter=jitter,
+                            drop_rate=drop_rate, late_rate=late_rate, skip_hours=skip_hours, from_now=from_now,
+                            duration=duration,
+                            metrics=metric or None, seed=seed, log=typer.echo))
+
+
+@app.command("stream-reset")
+def stream_reset() -> None:
+    """Delete the live-simulator devices (with their readings) and the recorded twin transitions.
+    Restart `twin serve` afterwards so cached twin states are rebuilt."""
+    from twin.streaming.store import SqlIngestor
+
+    async def reset() -> None:
+        typer.echo(f"{await SqlIngestor().reset()} live devices deleted, transitions cleared")
+
+    _run(reset)
 
 
 @app.command(hidden=True)

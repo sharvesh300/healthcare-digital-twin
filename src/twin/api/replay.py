@@ -1,35 +1,57 @@
-"""Twin API server: patient list, live sensor replay, and the /twin endpoints.
+"""Twin API server: patient list, recorded-history replay, the live twin and the /twin endpoints.
 
     GET /patients[?tag=composite-patient]   -> patients with their sensor windows
     WS  /ws/patients/{patient_id}?speed=60&kinds=glucose_fused,glucose,activity,medication
+                                            -> recorded history, straight from the database
+    /patients/{patient_id}, /ws/patients/{patient_id}/state, /ingest/events
+                                            -> the live twin, see twin.api.patients / twin.api.ingest
     /twin/...                               -> see twin.api.twin_view
+
+The live twin keeps state in this process: run a single worker.
 """
 
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, text
 
+from twin.api.ingest import router as ingest_router
+from twin.api.patients import router as patients_router
 from twin.api.twin_view import router as twin_router
 from twin.config import settings
 from twin.db import dispose_engine, engine, session_scope
 from twin.models import Patient
 from twin.models import views as v
+from twin.streaming.bus import InProcessBus
+from twin.streaming.manager import PatientTwinStateManager
+from twin.streaming.state import Rules
+from twin.streaming.store import SqlIngestor, SqlStateLoader, SqlTransitionStore
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await dispose_engine()
+async def lifespan(app: FastAPI):
+    rules = Rules(tz=settings().tz)
+    app.state.twin = PatientTwinStateManager(SqlStateLoader(rules), SqlTransitionStore(), InProcessBus(), rules)
+    app.state.ingestor = SqlIngestor()
+    ticker = asyncio.create_task(app.state.twin.run())  # staleness checks, eviction
+    try:
+        yield
+    finally:
+        ticker.cancel()
+        with suppress(asyncio.CancelledError):
+            await ticker
+        await dispose_engine()
 
 
 app = FastAPI(title="Healthcare digital twin API", lifespan=lifespan)
 app.include_router(twin_router)
+app.include_router(patients_router)
+app.include_router(ingest_router)
 
 
 @app.get("/health")

@@ -507,6 +507,12 @@ The **History** tab shows the recorded 5-minute series and daily CGM metrics. Th
 shows baseline labs, conditions and medications, with synthetic values flagged. **Predict** is
 reserved for the forecast and what-if modules.
 
+On the Live tab, **Replay** switches the same view to a recorded window. Pick a preset or a
+From / To time, press play, then scrub or change the speed (30–600×).
+`WS /ws/patients/{id}/state/replay?start=&end=&speed=` folds the recorded twin (fused CGM,
+wearables, sleep) through the same state rules as the live twin. It answers in the live
+protocol, so every component is reused, and it takes play, pause, seek and speed commands.
+
 The dashboard uses `GET /patients/{id}/readings` (chart points: live readings plus the recorded
 history before them) and the `live` summary in `GET /patients`. The WebSocket accepts browser
 origins from `ALLOWED_ORIGINS`. See [twin-ui/README.md](twin-ui/README.md) and

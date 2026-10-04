@@ -465,3 +465,35 @@ Phases 0–4 are implemented. Predict (phase 5) is a placeholder tab. Difference
 - **Every API call runs at request time** (`connection()` in `lib/api/server.ts`), so a build
   never needs the API.
 
+### Replay (added 2026-10-04)
+
+The Live tab has a **Live now / Replay** switch. Replay reuses the whole live view: the figure,
+glucose card, vital cards, charts and feed. Only the clock and the data source change.
+
+- **Server.** `twin/streaming/replay.py`, the `ReplayEngine`, is pure.
+  - It folds the recorded readings (`SqlStateLoader.recorded`: fused CGM, recorded wearables,
+    sleep stages) through `apply_readings`, the same rules as the live twin.
+  - It starts with 24 h of warm-up, so the state at the window's start is complete.
+  - It emits the live protocol: a `snapshot`, then deltas with sequential versions, then
+    transitions.
+  - `WS /ws/patients/{id}/state/replay?start=&end=&speed=&autoplay=` runs it on a 250 ms tick.
+    It takes `play`, `pause`, `seek` and `speed` commands and sends `replay` progress messages.
+- **Snapshots now carry context.** Live and replay snapshots include `series` (24 h of glucose
+  and heart-rate points) and `feed` (recent transitions). Any snapshot can therefore rebuild the
+  view: a reconnect, a switch between live and replay, or a seek.
+- **Client.**
+  - `useTwinStream(patientId, init, source)` takes a live or replay source. Changing the source
+    swaps in a fresh store that starts from what is on screen.
+  - A replay doesn't reconnect.
+  - Ages are measured on the replay clock.
+  - `ReplayBar` has window presets, From / To pickers in the clinic zone, play / pause, a
+    scrubber and a speed control.
+- **Checked in the browser:**
+  - preview at the window start;
+  - play at 120× (7.5 device-minutes per 4 s);
+  - a scrub-seek;
+  - switching to 600×;
+  - the "Last night" preset showing the sleep scene at 01:00;
+  - "Live now" returning to the live twin;
+  - the 375 px layout.
+

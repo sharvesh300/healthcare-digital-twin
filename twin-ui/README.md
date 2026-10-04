@@ -47,6 +47,15 @@ The API accepts WebSocket connections only from the origins in `ALLOWED_ORIGINS`
   - A small external store (`lib/twin/store.ts`) applies each delta in version order.
   - On a gap it asks for a resync.
   - It reconnects with jittered backoff, and a watchdog catches a silent socket.
+- **Replay** uses the same page and the same components. The **Live now / Replay** switch
+  opens the replay controls (`components/live/replay-bar.tsx`):
+  - window presets (last 3 h, 6 h, 24 h, last night);
+  - From / To date-time pickers in the clinic time zone;
+  - play / pause, a scrubber, and 30–600× speed.
+
+  The hook then connects to `WS /ws/patients/{id}/state/replay`. The server replays the recorded
+  data through the twin's own state rules and sends the same snapshot and delta messages as the
+  live stream, plus `replay` progress messages. Ages are measured on the replay clock.
 - **The figure** (`components/twin/twin-figure.tsx`) is SVG with CSS keyframes. Each loop's
   duration comes from a custom property set from the state:
   - `--beat` is 60 / heart rate.

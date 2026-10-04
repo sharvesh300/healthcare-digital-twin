@@ -163,7 +163,7 @@ WITH wear AS (
   JOIN core.device d USING (device_id)
   JOIN ref.device_model dm USING (model_id)
   JOIN ref.wearable_metric m USING (metric_id)
-  WHERE m.code NOT IN ('wear_minutes', 'ibi_ms', 'hrv_rmssd')
+  WHERE m.code NOT IN ('wear_minutes', 'ibi_ms', 'hrv_rmssd') AND NOT dm.is_live_simulator
   GROUP BY 1, 2
 ), hrv AS (  -- real RMSSD per 5 minutes from inter-beat intervals (artefacts excluded)
   SELECT patient_id, time_bucket(INTERVAL '5 minutes', time) AS time, sqrt(avg(diff * diff)) AS rmssd_5min
@@ -172,7 +172,8 @@ WITH wear AS (
                w.time - lag(w.time) OVER (PARTITION BY w.device_id ORDER BY w.time)   AS gap
         FROM ts.wearable_sample w
         JOIN ref.wearable_metric m ON m.metric_id = w.metric_id AND m.code = 'ibi_ms'
-        JOIN core.device d ON d.device_id = w.device_id) b
+        JOIN core.device d ON d.device_id = w.device_id
+        JOIN ref.device_model dm ON dm.model_id = d.model_id AND NOT dm.is_live_simulator) b
   WHERE gap < INTERVAL '2.5 seconds' AND abs(diff) < 200
   GROUP BY 1, 2
   HAVING count(*) >= 30
@@ -196,11 +197,12 @@ SELECT g.patient_id,
        w.spo2, w.respiration_rate, w.stress, w.skin_temp, w.eda,
        hv.rmssd_5min,
        (SELECT ss.stage::text FROM ts.sleep_segment ss JOIN core.device sd ON sd.device_id = ss.device_id
+        JOIN ref.device_model sdm ON sdm.model_id = sd.model_id AND NOT sdm.is_live_simulator
         WHERE sd.patient_id = g.patient_id AND g.time >= ss.start_time AND g.time < ss.end_time LIMIT 1) AS sleep_stage,
        coalesce(w.synthetic_channels, '{}')
          || CASE WHEN EXISTS (SELECT 1 FROM ts.sleep_segment ss JOIN core.device sd ON sd.device_id = ss.device_id
                               JOIN ref.device_model sdm ON sdm.model_id = sd.model_id
-                              WHERE sd.patient_id = g.patient_id AND sdm.is_synthetic
+                              WHERE sd.patient_id = g.patient_id AND sdm.is_synthetic AND NOT sdm.is_live_simulator
                                 AND g.time >= ss.start_time AND g.time < ss.end_time)
                  THEN ARRAY['sleep'] ELSE '{}' END              AS synthetic_channels,
        coalesce(ds.insulin_fast_units, 0)  AS insulin_fast_units,

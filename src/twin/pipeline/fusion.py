@@ -74,7 +74,7 @@ async def _load(s, cfg: Settings, patient_id: uuid.UUID, subject_id: str, source
         select(Device.device_id, DeviceModel.model_id, DeviceModel.manufacturer, DeviceModel.model_name,
                DeviceModel.kind, DeviceModel.nominal_interval)
         .join(DeviceModel, DeviceModel.model_id == Device.model_id)
-        .where(Device.patient_id == patient_id)
+        .where(Device.patient_id == patient_id, DeviceModel.is_live_simulator.is_(False))
     )).all()
     # Reference = the CGM with the finest sampling interval; it defines the glucose scale.
     cgms = sorted((d for d in devices if d.kind == DeviceKind.cgm), key=lambda d: d.nominal_interval)

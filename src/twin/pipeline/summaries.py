@@ -94,7 +94,10 @@ async def _patient_resources(s, patient_id, cfg: Settings) -> list[dict]:
     pid = str(patient_id)
     tz = cfg.tz
     resources = []
-    devices = await s.scalars(select(Device).where(Device.patient_id == patient_id).order_by(Device.device_id))
+    # Live-simulator devices (twin simulate-stream) are not part of the patient's record.
+    devices = await s.scalars(
+        select(Device).join(DeviceModel, DeviceModel.model_id == Device.model_id)
+        .where(Device.patient_id == patient_id, DeviceModel.is_live_simulator.is_(False)).order_by(Device.device_id))
     for device in devices:
         m = device.model
         resources.append({
@@ -146,7 +149,8 @@ async def _patient_resources(s, patient_id, cfg: Settings) -> list[dict]:
     # Wearable summaries (heart rate, steps) reference the patient's wearable device.
     wearables = dict((await s.execute(
         select(DeviceModel.is_synthetic, Device.device_id).join(DeviceModel, DeviceModel.model_id == Device.model_id)
-        .where(Device.patient_id == patient_id, DeviceModel.kind == DeviceKind.wearable)
+        .where(Device.patient_id == patient_id, DeviceModel.kind == DeviceKind.wearable,
+               DeviceModel.is_live_simulator.is_(False))
         .order_by(Device.device_id))).all())
     wearable_id, generator_id = wearables.get(False), wearables.get(True)
     a = v.activity_daily.c

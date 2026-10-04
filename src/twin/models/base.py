@@ -85,6 +85,17 @@ class FusionSource(enum.StrEnum):
     secondary_only = "secondary_only"
 
 
+class TwinSignal(enum.StrEnum):
+    """A live-twin signal whose status can change (ts.twin_state_transition)."""
+
+    glucose = "glucose"  # band: very_low, low, in_range, high, very_high; or stale
+    glucose_trend = "glucose_trend"  # rising_fast, rising, steady, falling, falling_fast
+    heart_rate = "heart_rate"  # low, normal, elevated; or stale
+    activity = "activity"  # sedentary, light, moderate, vigorous
+    sleep = "sleep"  # awake, light, deep, rem
+    spo2 = "spo2"  # low, borderline, normal
+
+
 def pg_enum(cls: type[enum.Enum], name: str) -> Enum:
     """A PostgreSQL enum type in the ref schema, stored by value."""
     return Enum(cls, name=name, schema="ref", values_callable=lambda e: [m.value for m in e])

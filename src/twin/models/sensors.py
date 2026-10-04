@@ -10,10 +10,10 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, SmallInteger, false
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Numeric, SmallInteger, false
 from sqlalchemy.orm import Mapped, mapped_column
 
-from twin.models.base import TIMESTAMPTZ, Base, FusionSource, SleepStage, pg_enum
+from twin.models.base import TIMESTAMPTZ, Base, FusionSource, SleepStage, TwinSignal, pg_enum
 from twin.models.patient import Device, Patient
 from twin.models.reference import WearableMetric
 
@@ -82,3 +82,20 @@ class SleepSegment(Base):
     start_time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
     end_time: Mapped[datetime] = mapped_column(TIMESTAMPTZ)
     stage: Mapped[SleepStage] = mapped_column(pg_enum(SleepStage, "sleep_stage"))
+
+
+class TwinStateTransition(Base):
+    """A status change of the live twin (glucose in_range -> high, sleep light -> deep, a signal
+    going stale), recorded when the twin publishes it. Readings themselves are in the tables
+    above; this is the record of what the twin concluded from them (twin.streaming.state)."""
+
+    __tablename__ = "twin_state_transition"
+    __table_args__ = {"schema": "ts"}
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Patient.patient_id, ondelete="CASCADE"), primary_key=True)
+    signal: Mapped[TwinSignal] = mapped_column(pg_enum(TwinSignal, "twin_signal"), primary_key=True)
+    time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True, comment="device time of the change")
+    from_status: Mapped[str | None]
+    to_status: Mapped[str]
+    value: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), comment="the signal's value at the change")
+    state_version: Mapped[int] = mapped_column(BigInteger, comment="twin state version that published it")

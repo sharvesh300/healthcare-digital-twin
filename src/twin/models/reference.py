@@ -165,3 +165,5 @@ class DeviceModel(Base):
     nominal_interval: Mapped[timedelta | None] = mapped_column(Interval)
     is_synthetic: Mapped[bool] = mapped_column(
         server_default=false(), comment="a generator, not a physical device (readings are synthetic)")
+    is_live_simulator: Mapped[bool] = mapped_column(
+        server_default=false(), comment="streams live readings via `twin simulate-stream`; kept out of research views")

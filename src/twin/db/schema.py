@@ -10,8 +10,8 @@
    seeds/mappings/condition_group_map.csv; drug classes assigned from ATC codes plus
    seeds/mappings/medication_class_override.csv
 
-Schema changes to existing tables are not migrated: rebuild with scripts/reset.sh
-(all twin data is regenerated from the sources).
+Schema changes to existing tables are not migrated (except the few columns listed in
+ADDED_COLUMNS): rebuild with scripts/reset.sh (all twin data is regenerated from the sources).
 """
 
 from __future__ import annotations
@@ -41,12 +41,18 @@ from twin.models import (
     MedicationProduct,
     ObservationCode,
     Tag,
+    TwinStateTransition,
     WearableMetric,
     WearableSample,
 )
 
 SCHEMAS = ("ref", "core", "ts", "report", "ml")
-HYPERTABLES = (GlucoseReading, WearableSample, GlucoseFused)
+HYPERTABLES = (GlucoseReading, WearableSample, GlucoseFused, TwinStateTransition)
+
+# Columns added after a table was first created (create_all never alters existing tables).
+ADDED_COLUMNS = (
+    "ALTER TABLE ref.device_model ADD COLUMN IF NOT EXISTS is_live_simulator boolean NOT NULL DEFAULT false",
+)
 
 # Reference vocabularies seeded from seeds/reference/<table>.csv, in FK order.
 SEED_TABLES = (
@@ -139,6 +145,8 @@ async def init_db(log=print) -> None:
         for schema in SCHEMAS:
             await conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         await conn.run_sync(Base.metadata.create_all)
+        for stmt in ADDED_COLUMNS:
+            await conn.exec_driver_sql(stmt)
         log(f"tables: {len(Base.metadata.tables)}")
 
         for model in HYPERTABLES:

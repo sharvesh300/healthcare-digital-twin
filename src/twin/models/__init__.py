@@ -6,7 +6,8 @@ One module per database schema:
                      drug classes, RxNorm medications, wearable metrics, device models)
   patient    core.*  patient master record and patient-owned data (tags, observations,
                      conditions, medications, encounters, devices, CGM calibration)
-  sensors    ts.*    raw CGM readings, wearable samples and the fused CGM stream (hypertables)
+  sensors    ts.*    raw CGM readings, wearable samples, the fused CGM stream and live-twin
+                     state transitions (hypertables)
   views      report.* views and ts.* continuous aggregates, read-only (own MetaData)
 
 Conventions
@@ -29,6 +30,7 @@ from twin.models.base import (
     ObservationCategory,
     Sex,
     SleepStage,
+    TwinSignal,
     ValueType,
 )
 from twin.models.patient import (
@@ -59,6 +61,7 @@ from twin.models.sensors import (
     GlucoseFused,
     GlucoseReading,
     SleepSegment,
+    TwinStateTransition,
     WearableSample,
 )
 
@@ -67,5 +70,6 @@ __all__ = [
     "DeviceKind", "DeviceModel", "DrugClass", "Encounter", "EncounterClass", "FusionSource", "GlucoseFused",
     "GlucoseReading", "LagKind", "Medication", "MedicationAtc", "MedicationDose", "MedicationProduct",
     "MedicationRegimen", "Observation", "ObservationCategory", "ObservationCode", "Patient", "PatientTag", "Sex",
-    "SleepSegment", "SleepStage", "Tag", "ValueType", "WearableMetric", "WearableSample",
+    "SleepSegment", "SleepStage", "Tag", "TwinSignal", "TwinStateTransition", "ValueType", "WearableMetric",
+    "WearableSample",
 ]

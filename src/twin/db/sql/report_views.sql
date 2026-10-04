@@ -161,6 +161,10 @@ JOIN ref.medication m USING (medication_id)
 LEFT JOIN ref.drug_class dc ON dc.class_id = m.drug_class_id
 JOIN ref.data_source ds USING (source_id);
 
+-- Readings from live-simulator devices (ref.device_model.is_live_simulator, written by
+-- `twin simulate-stream`) feed only the live twin (report.twin_latest); every other view
+-- below excludes them, so replayed history never doubles a patient's series.
+
 -- Daily wearable summary per patient (one column per metric; NULL when not measured).
 -- synthetic_metrics lists the metrics that came from a generator, not a real device.
 CREATE VIEW report.activity_daily AS
@@ -185,6 +189,7 @@ FROM ts.wearable_daily w
 JOIN core.device d USING (device_id)
 JOIN ref.device_model dm USING (model_id)
 JOIN ref.wearable_metric m USING (metric_id)
+WHERE NOT dm.is_live_simulator
 GROUP BY d.patient_id, w.day;
 
 -- Sleep per night ("night of" = local date of the evening the sleep started).
@@ -198,6 +203,7 @@ WITH seg AS (
   FROM ts.sleep_segment s
   JOIN core.device d USING (device_id)
   JOIN ref.device_model dm USING (model_id)
+  WHERE NOT dm.is_live_simulator
 )
 SELECT patient_id,
        night,
@@ -228,6 +234,7 @@ WITH sleep_spo2 AS (
                           AND w.time < ss.end_time AND ss.stage <> 'awake'
   JOIN core.device d ON d.device_id = w.device_id
   JOIN ref.device_model dm USING (model_id)
+  WHERE NOT dm.is_live_simulator
 ), flagged AS (
   SELECT *, value <= max(value) OVER (PARTITION BY patient_id, night ORDER BY time
                                       ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING) - 3 AS dropped
@@ -258,6 +265,7 @@ WITH beats AS (
   FROM ts.wearable_sample w
   JOIN ref.wearable_metric m ON m.metric_id = w.metric_id AND m.code = 'ibi_ms'
   JOIN core.device d ON d.device_id = w.device_id
+  JOIN ref.device_model dm ON dm.model_id = d.model_id AND NOT dm.is_live_simulator
   WHERE (w.time AT TIME ZONE 'America/Chicago')::time < TIME '05:00'
 ), real_hrv AS (
   SELECT patient_id, ((time AT TIME ZONE 'America/Chicago') - INTERVAL '12 hours')::date AS night,
@@ -272,6 +280,7 @@ WITH beats AS (
   FROM ts.wearable_sample w
   JOIN ref.wearable_metric m ON m.metric_id = w.metric_id AND m.code = 'hrv_rmssd'
   JOIN core.device d ON d.device_id = w.device_id
+  JOIN ref.device_model dm ON dm.model_id = d.model_id AND NOT dm.is_live_simulator
   GROUP BY 1, 2
 )
 SELECT * FROM real_hrv
@@ -298,7 +307,7 @@ SELECT        d.patient_id,
 FROM ts.glucose_daily g
 JOIN core.device d USING (device_id)
 JOIN ref.device_model m USING (model_id)
-WHERE m.kind = 'cgm';
+WHERE m.kind = 'cgm' AND NOT m.is_live_simulator;
 
 -- Per-device whole-window CGM metrics (raw readings, no fusion).
 CREATE VIEW report.cgm_device_window AS
@@ -313,7 +322,7 @@ SELECT        d.patient_id,
 FROM ts.glucose_reading r
 JOIN core.device d USING (device_id)
 JOIN ref.device_model m USING (model_id)
-WHERE m.kind = 'cgm'
+WHERE m.kind = 'cgm' AND NOT m.is_live_simulator
 GROUP BY d.patient_id, d.device_id, m.manufacturer, m.model_name;
 
 -- Daily CGM metrics from the fused stream (ts.glucose_fused, 5-min grid).
@@ -368,7 +377,7 @@ JOIN report.cgm_window w USING (patient_id);
 CREATE VIEW report.sensor_window AS
 SELECT d.patient_id, min(t.lo) AS window_start, max(t.hi) AS window_end
 FROM core.device d
-JOIN ref.device_model dm ON dm.model_id = d.model_id AND NOT dm.is_synthetic
+JOIN ref.device_model dm ON dm.model_id = d.model_id AND NOT dm.is_synthetic AND NOT dm.is_live_simulator
 JOIN (
   SELECT device_id, min(time) AS lo, max(time) AS hi FROM ts.glucose_reading GROUP BY device_id
   UNION ALL
@@ -386,6 +395,7 @@ SELECT d.patient_id,
 FROM ts.glucose_reading r
 JOIN core.device d USING (device_id)
 JOIN ref.device_model m USING (model_id)
+WHERE NOT m.is_live_simulator
 UNION ALL
 SELECT d.patient_id,
        w.time,
@@ -396,6 +406,7 @@ FROM ts.wearable_sample w
 JOIN core.device d USING (device_id)
 JOIN ref.device_model dm USING (model_id)
 JOIN ref.wearable_metric m USING (metric_id)
+WHERE NOT dm.is_live_simulator
 GROUP BY d.patient_id, w.time, dm.manufacturer, dm.model_name
 UNION ALL
 SELECT d.patient_id,
@@ -406,6 +417,7 @@ SELECT d.patient_id,
 FROM ts.sleep_segment s
 JOIN core.device d USING (device_id)
 JOIN ref.device_model dm USING (model_id)
+WHERE NOT dm.is_live_simulator
 UNION ALL
 SELECT f.patient_id,
        f.time,
@@ -425,3 +437,45 @@ FROM core.medication_dose md
 JOIN ref.medication m USING (medication_id)
 LEFT JOIN ref.drug_class dc ON dc.class_id = m.drug_class_id
 JOIN ref.data_source ds ON ds.source_id = md.source_id;
+
+-- Latest reading per patient and live-twin metric: what twin.streaming builds a patient's
+-- state from when it is first loaded. Readings from live-simulator devices win; otherwise the
+-- latest reading at or before now() (twin time runs past the wall clock for some recordings).
+-- Historical glucose comes from the fused stream, live glucose from the live CGM.
+-- metric = 'glucose', 'sleep' or a ref.wearable_metric code (beat-level ibi_ms excluded).
+CREATE VIEW report.twin_latest AS
+WITH candidate AS (
+  SELECT d.patient_id, d.device_id, 'glucose'::text AS metric, r.time,
+         r.glucose_mg_dl::numeric AS value_num, NULL::text AS value_text, NULL::timestamptz AS until,
+         'mg/dL'::text AS unit, dm.manufacturer || ' ' || dm.model_name AS source, true AS is_live
+  FROM core.device d
+  JOIN ref.device_model dm ON dm.model_id = d.model_id AND dm.is_live_simulator AND dm.kind = 'cgm'
+  CROSS JOIN LATERAL (SELECT time, glucose_mg_dl FROM ts.glucose_reading r
+                      WHERE r.device_id = d.device_id ORDER BY time DESC LIMIT 1) r
+  UNION ALL
+  SELECT p.patient_id, NULL, 'glucose', f.time, f.glucose_mg_dl, NULL, NULL, 'mg/dL', 'fused CGM', false
+  FROM core.patient p
+  CROSS JOIN LATERAL (SELECT time, glucose_mg_dl FROM ts.glucose_fused f
+                      WHERE f.patient_id = p.patient_id AND f.time <= now() ORDER BY time DESC LIMIT 1) f
+  UNION ALL
+  SELECT d.patient_id, d.device_id, m.code, w.time, w.value, NULL, NULL, m.unit,
+         dm.manufacturer || ' ' || dm.model_name, dm.is_live_simulator
+  FROM core.device d
+  JOIN ref.device_model dm ON dm.model_id = d.model_id AND dm.kind = 'wearable'
+  JOIN ref.wearable_metric m ON m.code NOT IN ('ibi_ms', 'wear_minutes')
+  CROSS JOIN LATERAL (SELECT time, value FROM ts.wearable_sample w
+                      WHERE w.device_id = d.device_id AND w.metric_id = m.metric_id
+                        AND (dm.is_live_simulator OR w.time <= now())
+                      ORDER BY time DESC LIMIT 1) w
+  UNION ALL
+  SELECT d.patient_id, d.device_id, 'sleep', s.start_time, NULL, s.stage::text, s.end_time, NULL,
+         dm.manufacturer || ' ' || dm.model_name, dm.is_live_simulator
+  FROM core.device d
+  JOIN ref.device_model dm ON dm.model_id = d.model_id
+  CROSS JOIN LATERAL (SELECT start_time, end_time, stage FROM ts.sleep_segment s
+                      WHERE s.device_id = d.device_id AND (dm.is_live_simulator OR s.start_time <= now())
+                      ORDER BY start_time DESC LIMIT 1) s
+)
+SELECT DISTINCT ON (patient_id, metric) *
+FROM candidate
+ORDER BY patient_id, metric, is_live DESC, time DESC;

@@ -144,3 +144,11 @@ replay_stream = Table(
     Column("payload", JSONB),
     schema="report",
 )
+
+twin_latest = Table(
+    "twin_latest", views,
+    Column("patient_id", UUID), Column("device_id", BigInteger), Column("metric", Text), Column("time", TS),
+    _num("value_num"), Column("value_text", Text), Column("until", TS), Column("unit", Text),
+    Column("source", Text), Column("is_live", Boolean),
+    schema="report",
+)

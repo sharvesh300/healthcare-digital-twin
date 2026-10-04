@@ -85,7 +85,6 @@ def test_sensor_csv_variants(tmp_path):
     assert streams.fitbit["mets"].isna().all()
     assert streams.meals.iloc[0]["meal_type"] == "snack"
     assert streams.meals.iloc[0]["pct_consumed"] == 100
-    assert list(streams.photos) == ["photos/a.jpg", "photos/b.jpg"]
     assert streams.study_day_1.isoformat() == "2020-05-01"
 
 

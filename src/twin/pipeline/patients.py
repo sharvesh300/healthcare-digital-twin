@@ -11,7 +11,14 @@ from sqlalchemy.dialects.postgresql import insert
 
 from twin.config import Settings
 from twin.db import lookup, session_scope
-from twin.models import DataSource, LabResult, ObservationCode, Patient, PatientTag, Tag
+from twin.models import (
+    DataSource,
+    Observation,
+    ObservationCode,
+    Patient,
+    PatientTag,
+    Tag,
+)
 from twin.pipeline.matching import Match, day_offset, match
 from twin.sources import cgmacros
 from twin.sources.synthea import index_cohort
@@ -86,12 +93,15 @@ async def run_match(cfg: Settings) -> tuple[list[Match], list[cgmacros.Participa
                 insert(PatientTag).values(patient_id=values["patient_id"], tag_id=tag_id).on_conflict_do_nothing()
             )
 
+            # Real baseline labs from the participant (source = cgmacros). Synthetic EHR
+            # observations of the same patient are owned by `copy-ehr` and left alone.
             effective = lab_timestamp(p, day1, offset, cfg)
-            await s.execute(delete(LabResult).where(LabResult.patient_id == values["patient_id"]))
+            await s.execute(delete(Observation).where(
+                Observation.patient_id == values["patient_id"], Observation.source_id == source_id))
             await s.execute(
-                insert(LabResult),
-                [{"patient_id": values["patient_id"], "code_id": lab_codes[loinc], "effective_at": effective, "value": v}
-                 for loinc, v in p.labs.items()],
+                insert(Observation),
+                [{"patient_id": values["patient_id"], "code_id": lab_codes[loinc], "effective_at": effective,
+                  "value_num": v, "source_id": source_id} for loinc, v in p.labs.items()],
             )
             rows.append({
                 "subject_id": p.subject_id, "patient_id": syn.patient_id,

@@ -1,4 +1,4 @@
-"""`load-sensors` step: devices, meals and raw readings into TimescaleDB (twin time)."""
+"""`load-sensors` step: devices and raw CGM/wearable readings into TimescaleDB (twin time)."""
 
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from twin.config import Settings
-from twin.db import copy_records, engine, session_scope
+from twin.db import copy_records, engine, lookup, session_scope
 from twin.models import (
+    DataSource,
     Device,
     DeviceModel,
-    FitbitReading,
     GlucoseReading,
-    Meal,
-    MealPhoto,
     Patient,
+    WearableMetric,
+    WearableSample,
 )
 from twin.pipeline.patients import load_participants
 from twin.sources import cgmacros
@@ -31,7 +31,9 @@ LIBRE = ("Abbott", "FreeStyle Libre Pro")
 CONTOUR = ("Ascensia", "Contour Next")
 FITBIT = ("Fitbit", "Sense")
 CGM_MODELS = {"Dexcom GL": DEXCOM, "Libre GL": LIBRE}
-CONTINUOUS_AGGREGATES = ("ts.glucose_daily", "ts.fitbit_daily")
+CONTINUOUS_AGGREGATES = ("ts.glucose_daily", "ts.wearable_daily")
+# CGMacros Fitbit column (after parsing) -> ref.wearable_metric code
+FITBIT_METRICS = {"heart_rate": "heart_rate", "mets": "mets", "activity_level": "activity_level", "active_kcal": "active_kcal"}
 
 
 def _none(value):
@@ -65,12 +67,13 @@ async def _load_patient(session, cfg: Settings, patient_id: uuid.UUID, subject_i
     stats: dict = {"subject": subject_id}
 
     devices = await _ensure_devices(session, patient_id)
+    by_code = await lookup(session, WearableMetric.code, WearableMetric.metric_id)
+    metric_ids = {column: by_code[code] for column, code in FITBIT_METRICS.items()}
     device_ids = list(devices.values())
 
     # Idempotent reload: replace this patient's rows wholesale.
     await session.execute(delete(GlucoseReading).where(GlucoseReading.device_id.in_(device_ids)))
-    await session.execute(delete(FitbitReading).where(FitbitReading.device_id.in_(device_ids)))
-    await session.execute(delete(Meal).where(Meal.patient_id == patient_id))
+    await session.execute(delete(WearableSample).where(WearableSample.device_id.in_(device_ids)))
 
     glucose: list[tuple] = []
     for column, model in CGM_MODELS.items():
@@ -86,51 +89,18 @@ async def _load_patient(session, cfg: Settings, patient_id: uuid.UUID, subject_i
     stats["fingerstick"] = len(participant.fingersticks)
     await copy_records(session, GlucoseReading, ("device_id", "time", "glucose_mg_dl"), glucose)
 
+    # Fitbit: one row per (minute, metric) that has a value.
     fitbit = streams.fitbit.copy()
     fitbit.index = cgmacros.shift(fitbit.index, offset_days, tz)
     fitbit = fitbit[fitbit.index.notna()]
-    stats["fitbit"] = await copy_records(
-        session, FitbitReading, ("device_id", "time", "heart_rate", "mets", "activity_level", "active_kcal"),
-        (
-            (devices[FITBIT], t.to_pydatetime(),
-             None if _none(hr) is None else int(hr), _dec(mets, 1),
-             None if _none(level) is None else int(level), _dec(kcal, 3))
-            for t, (hr, mets, level, kcal) in zip(fitbit.index, fitbit.itertuples(index=False))
-        ),
-    )
-
-    meals = streams.meals.copy()
-    meals.index = cgmacros.shift(meals.index, offset_days, tz)
-    meals = meals[meals.index.notna()]
-    meal_rows = [
-        {"patient_id": patient_id, "started_at": t.to_pydatetime(), "meal_type": m.meal_type,
-         "energy_kcal": _dec(m.energy_kcal, 1), "carbs_g": _dec(m.carbs_g, 1), "protein_g": _dec(m.protein_g, 1),
-         "fat_g": _dec(m.fat_g, 1), "fiber_g": _dec(m.fiber_g, 1), "pct_consumed": _dec(m.pct_consumed, 2)}
-        for t, m in zip(meals.index, meals.itertuples(index=False))
-    ]
-    meal_ids: list[tuple[datetime, int]] = []
-    if meal_rows:
-        result = await session.execute(
-            insert(Meal).values(meal_rows).on_conflict_do_nothing().returning(Meal.started_at, Meal.meal_id)
-        )
-        meal_ids = sorted(result.all())
-    stats["meals"] = len(meal_ids)
-
-    # Each photo belongs to the most recent meal start at or before it
-    # (the start photo shares the meal's timestamp; the end photo follows it).
-    photos = streams.photos.copy()
-    photos.index = cgmacros.shift(photos.index, offset_days, tz)
-    photos = photos[photos.index.notna()]
-    starts = pd.DatetimeIndex([t for t, _ in meal_ids])
-    photo_rows = {}
-    for t, path in photos.items():
-        pos = starts.searchsorted(t, side="right") - 1
-        if pos >= 0:
-            key = (meal_ids[pos][1], t.to_pydatetime())
-            photo_rows.setdefault(key, {"meal_id": key[0], "taken_at": key[1], "path": f"CGMacros-{subject_id}/{path}"})
-    if photo_rows:
-        await session.execute(insert(MealPhoto).values(list(photo_rows.values())).on_conflict_do_nothing())
-    stats["photos"] = len(photo_rows)
+    samples = []
+    for column, metric_id in metric_ids.items():
+        if column not in fitbit:
+            continue
+        values = fitbit[column].dropna()
+        samples += [(devices[FITBIT], metric_id, t.to_pydatetime(), _dec(v, 3)) for t, v in values.items()]
+    stats["fitbit_samples"] = await copy_records(
+        session, WearableSample, ("device_id", "metric_id", "time", "value"), samples)
     stats["ignored_columns"] = ",".join(streams.ignored_columns)
     return stats
 
@@ -139,7 +109,10 @@ async def run_load_sensors(cfg: Settings, log=print) -> list[dict]:
     participants = load_participants(cfg)
     async with session_scope() as s:
         patients = (await s.execute(
-            select(Patient.patient_id, Patient.source_subject_id, Patient.time_offset).order_by(Patient.source_subject_id)
+            select(Patient.patient_id, Patient.source_subject_id, Patient.time_offset)
+            .join(DataSource, DataSource.source_id == Patient.source_id)
+            .where(DataSource.code == "cgmacros")
+            .order_by(Patient.source_subject_id)
         )).all()
 
     results = []
@@ -154,7 +127,7 @@ async def run_load_sensors(cfg: Settings, log=print) -> list[dict]:
         conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
         for view in CONTINUOUS_AGGREGATES:
             await conn.exec_driver_sql(f"CALL refresh_continuous_aggregate('{view}', NULL, NULL)")
-        for model in (GlucoseReading, FitbitReading):
+        for model in (GlucoseReading, WearableSample):
             await conn.execute(
                 text("SELECT add_compression_policy(:t, compress_after => INTERVAL '30 days', if_not_exists => true)"),
                 {"t": f"{model.__table__.schema}.{model.__table__.name}"},

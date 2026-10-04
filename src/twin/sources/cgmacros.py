@@ -218,8 +218,7 @@ class SensorStreams:
 
     glucose: dict[str, pd.Series]  # 'Dexcom GL' / 'Libre GL' -> native readings
     fitbit: pd.DataFrame  # heart_rate, mets, activity_level, active_kcal
-    meals: pd.DataFrame  # started_at index, meal_type + macros
-    photos: pd.Series  # taken_at -> path
+    meals: pd.DataFrame  # started_at index, meal_type + macros; not stored, used to time-check CGM clocks
     ignored_columns: list[str]
 
     @property
@@ -250,15 +249,13 @@ def parse_streams(df: pd.DataFrame) -> SensorStreams:
         meals[dst] = pd.to_numeric(meal_rows[src], errors="coerce") if src in meal_rows else np.nan
     meals["pct_consumed"] = meals["pct_consumed"].clip(0, 100)
 
-    photo_rows = df["Image path"].dropna().astype(str).str.strip()
-    photos = photo_rows[photo_rows != ""]
-
     known = SENSOR_REQUIRED | set(MEAL_MACROS) | {"METs", "Intensity", "Calories (Activity)"}
     ignored = sorted(c for c in df.columns if c not in known)
-    return SensorStreams(glucose=glucose, fitbit=fitbit, meals=meals, photos=photos, ignored_columns=ignored)
+    return SensorStreams(glucose=glucose, fitbit=fitbit, meals=meals, ignored_columns=ignored)
 
 
 def shift(index: pd.DatetimeIndex, days: int, tz: str) -> pd.DatetimeIndex:
-    """Naive source-local wall time -> tz-aware twin time, preserving time of day."""
+    """Naive source-local wall time -> tz-aware twin time, preserving time of day. Non-existent
+    (spring-forward) and ambiguous (fall-back) local times become NaT and are dropped."""
     shifted = index + pd.Timedelta(days=days)
-    return shifted.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
+    return shifted.tz_localize(tz, ambiguous="NaT", nonexistent="NaT")

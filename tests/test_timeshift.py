@@ -19,7 +19,8 @@ def test_shift_across_dst_keeps_local_time():
     assert out[0].utcoffset() == pd.Timedelta(hours=-6)
 
 
-def test_nonexistent_and_ambiguous_times_do_not_raise():
-    # 02:30 on spring-forward day does not exist; 01:30 on fall-back day is ambiguous.
-    out = shift(pd.DatetimeIndex(["2026-03-08 02:30", "2026-11-01 01:30"]), 0, "America/Chicago")
-    assert out[0].strftime("%H:%M") == "03:00" and pd.isna(out[1])
+def test_nonexistent_and_ambiguous_times_are_dropped_not_collided():
+    # 02:30 on spring-forward day does not exist; 01:30 on fall-back day is ambiguous. Both
+    # become NaT (dropped) so they cannot collide with real readings at 03:00 / 01:30.
+    out = shift(pd.DatetimeIndex(["2026-03-08 02:30", "2026-03-08 03:00", "2026-11-01 01:30"]), 0, "America/Chicago")
+    assert pd.isna(out[0]) and out[1].strftime("%H:%M") == "03:00" and pd.isna(out[2])

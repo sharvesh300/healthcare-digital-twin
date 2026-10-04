@@ -1,26 +1,261 @@
 @import "tailwindcss";
 
+/* ── Design tokens: "sage and ink", light clinical (docs/plans/twin-dashboard-ui.md §4) ─────────
+   Raw values live on :root; @theme maps them to utilities (bg-canvas, text-ink-2, border-line,
+   text-vital-heart, bg-band-high/10, rounded-card, shadow-card, ease-standard, ...).
+   Palettes validated with the dataviz checker: vitals all-pairs, bands adjacent pairs. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --canvas: #f6f8f7;
+  --surface: #ffffff;
+  --surface-2: #eef3f1;
+  --surface-3: #e7ecea;
+  --line: #e2e8e5;
+  --line-strong: #cbd5d1;
+
+  --ink: #10231e;
+  --ink-2: #4b5d57;
+  --ink-3: #66756f;
+
+  --primary: #0e7c66;
+  --primary-strong: #0b6b58;
+  --primary-soft: #e3f2ee;
+
+  --vital-glucose: #0d9488;
+  --vital-heart: #e0335a;
+  --vital-oxygen: #7c3aed;
+  --vital-activity: #d97706;
+  --vital-sleep: #4b5d57;
+
+  --band-very-low: #a11a2b;
+  --band-low: #f47c7c;
+  --band-in-range: #15803d;
+  --band-high: #c99000;
+  --band-very-high: #b5440d;
+
+  --status-ok: #15803d;
+  --status-warn: #b45309;
+  --status-danger: #b91c1c;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-vital-glucose: var(--vital-glucose);
+  --color-vital-heart: var(--vital-heart);
+  --color-vital-oxygen: var(--vital-oxygen);
+  --color-vital-activity: var(--vital-activity);
+  --color-vital-sleep: var(--vital-sleep);
+  --color-band-very-low: var(--band-very-low);
+  --color-band-low: var(--band-low);
+  --color-band-in-range: var(--band-in-range);
+  --color-band-high: var(--band-high);
+  --color-band-very-high: var(--band-very-high);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-danger: var(--status-danger);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --text-display: 3.5rem;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.03em;
+  --text-metric: 1.875rem;
+  --text-metric--line-height: 2.25rem;
+  --text-metric--letter-spacing: -0.02em;
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
+  --text-label--letter-spacing: 0.06em;
+
+  --radius-chip: 6px;
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-stage: 24px;
+
+  --shadow-card: 0 1px 2px rgb(16 35 30 / 0.04), 0 2px 8px rgb(16 35 30 / 0.04);
+  --shadow-lift: 0 2px 4px rgb(16 35 30 / 0.05), 0 8px 24px rgb(16 35 30 / 0.07);
+  --shadow-pop: 0 8px 24px rgb(16 35 30 / 0.12), 0 2px 6px rgb(16 35 30 / 0.08);
+
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    background: var(--canvas);
+  }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--primary-soft);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Card title: small uppercase label in secondary ink. */
+@utility label {
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: var(--text-label--letter-spacing);
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Stale / synthetic texture: a quiet diagonal hatch, so state never rests on colour alone. */
+@utility hatch {
+  background-image: repeating-linear-gradient(135deg, rgb(102 117 111 / 0.07) 0 6px, transparent 6px 12px);
+}
+
+/* ── Twin figure motion ──────────────────────────────────────────────────────────────────────
+   Loop durations come from custom properties set by React (--beat = 60/HR s, --breath = 60/RR s,
+   --stride), so the browser runs them off the main thread and React only re-renders on change. */
+
+@property --aura {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgb(21 128 61 / 0);
+}
+
+.twin-stage {
+  transition: --aura 600ms var(--ease-standard), background-color 800ms var(--ease-standard);
+}
+
+.twin-part {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.twin-beat {
+  animation: twin-beat var(--beat, 1s) var(--ease-standard) infinite;
+}
+.twin-ripple {
+  animation: twin-ripple var(--beat, 1s) ease-out infinite;
+}
+.twin-breathe {
+  animation: twin-breathe var(--breath, 4s) ease-in-out infinite;
+}
+.twin-sway {
+  animation: twin-sway 4s ease-in-out infinite;
+}
+.twin-bob {
+  animation: twin-bob calc(var(--stride, 1.2s) / 2) ease-in-out infinite;
+}
+.twin-swing {
+  animation: twin-swing var(--stride, 1.2s) ease-in-out infinite alternate;
+}
+.twin-swing-reverse {
+  animation: twin-swing var(--stride, 1.2s) ease-in-out infinite alternate-reverse;
+}
+.twin-step {
+  animation: twin-step var(--stride, 1.2s) ease-in-out infinite alternate;
+}
+.twin-step-reverse {
+  animation: twin-step var(--stride, 1.2s) ease-in-out infinite alternate-reverse;
+}
+.twin-glow {
+  animation: twin-glow 2s ease-in-out infinite;
+}
+.twin-scan {
+  animation: twin-scan 6s linear infinite;
+}
+.twin-z {
+  animation: twin-z 3.2s ease-out infinite;
+}
+.twin-paused,
+.twin-paused * {
+  animation-play-state: paused !important;
+}
+
+@keyframes twin-beat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.14); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.07); }
+  70%, 100% { transform: scale(1); }
+}
+@keyframes twin-ripple {
+  0% { transform: scale(0.7); opacity: 0.55; }
+  70%, 100% { transform: scale(2.1); opacity: 0; }
+}
+@keyframes twin-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  45% { transform: scale(1.05, 1.08); }
+}
+@keyframes twin-sway {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50% { transform: rotate(1.2deg); }
+}
+@keyframes twin-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes twin-swing {
+  from { transform: rotate(-16deg); }
+  to { transform: rotate(16deg); }
+}
+@keyframes twin-step {
+  from { transform: rotate(-9deg); }
+  to { transform: rotate(9deg); }
+}
+@keyframes twin-glow {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@keyframes twin-scan {
+  0% { transform: translateY(-20%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(520%); opacity: 0; }
+}
+@keyframes twin-z {
+  0% { transform: translate(0, 0) scale(0.7); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: translate(14px, -46px) scale(1.15); opacity: 0; }
+}
+
+/* Live dot: a soft ring that expands from the dot. */
+.live-ping {
+  animation: live-ping 1.8s var(--ease-standard) infinite;
+}
+@keyframes live-ping {
+  0% { transform: scale(1); opacity: 0.5; }
+  80%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  /* The figure's loops stop at rest, not at their last keyframe; state stays visible statically. */
+  [class*="twin-"],
+  .live-ping {
+    animation: none !important;
+  }
 }

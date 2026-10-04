@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     seeds_dir: Path = Path("seeds")
     replay_speed: float = 60.0
+    # Browser origins allowed to open the live-twin WebSocket (comma-separated). Clients that
+    # send no Origin header (scripts, the simulator) are always allowed.
+    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # CGMacros timestamps are naive local time from a Texas study site.
     source_tz: str = "America/Chicago"
@@ -20,6 +23,10 @@ class Settings(BaseSettings):
     match_max_age_diff: int = 5
     # CGMacros cohort definition (HbA1c %).
     t2d_hba1c: float = 6.5
+
+    @property
+    def origins(self) -> set[str]:
+        return {o.strip() for o in self.allowed_origins.split(",") if o.strip()}
 
     @property
     def tz(self) -> ZoneInfo:

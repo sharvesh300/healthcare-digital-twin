@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from twin.db import session_scope
@@ -60,6 +60,26 @@ class SqlStateLoader:
                     out.append(Reading(row["time"], row["metric"], value, row["unit"], row["source"], row["until"]))
         return out
 
+    async def series(self, patient_id: UUID, metrics: Sequence[str], since: datetime,
+                     until: datetime) -> dict[str, list[tuple[datetime, float]]]:
+        """Points per metric between since and until, for charts. Live-device readings, plus the
+        recorded history (fused CGM, recorded wearables) before the first live point, so a chart
+        runs on seamlessly from the recording into the live stream."""
+        out = {}
+        async with session_scope() as s:
+            for metric in metrics:
+                p = {"p": patient_id, "a": since, "b": until, "m": metric}
+                if metric == "glucose":
+                    live_q, rec_q = _GLUCOSE_LIVE, _GLUCOSE_RECORDED
+                else:
+                    live_q, rec_q = _WEARABLE.format(live="m.is_live_simulator"), _WEARABLE.format(
+                        live="NOT m.is_live_simulator")
+                live = (await s.execute(text(live_q), p)).all()
+                cut = live[0][0] if live else until
+                recorded = [r for r in (await s.execute(text(rec_q), p)).all() if r[0] < cut]
+                out[metric] = [(t, float(v)) for t, v in recorded + live]
+        return out
+
     async def _glucose_window(self, s, patient_id: UUID, row) -> list[Reading]:
         """The latest glucose and the readings before it in the trend window (same source)."""
         start = row["time"] - self.rules.trend_window
@@ -81,6 +101,21 @@ class SqlStateLoader:
             .where(WearableSample.device_id == row["device_id"], WearableMetric.code == "steps",
                    WearableSample.time >= midnight, WearableSample.time <= row["time"]))
         return Reading(row["time"], "steps", float(total or 0), row["unit"], row["source"])
+
+
+_GLUCOSE_LIVE = """
+SELECT r.time, r.glucose_mg_dl FROM ts.glucose_reading r
+JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
+WHERE d.patient_id = :p AND m.is_live_simulator AND m.kind = 'cgm' AND r.time BETWEEN :a AND :b
+ORDER BY r.time"""
+_GLUCOSE_RECORDED = """
+SELECT time, glucose_mg_dl FROM ts.glucose_fused WHERE patient_id = :p AND time BETWEEN :a AND :b ORDER BY time"""
+_WEARABLE = """
+SELECT w.time, avg(w.value) FROM ts.wearable_sample w
+JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
+JOIN ref.wearable_metric wm ON wm.metric_id = w.metric_id AND wm.code = :m
+WHERE d.patient_id = :p AND {live} AND w.time BETWEEN :a AND :b
+GROUP BY w.time ORDER BY w.time"""
 
 
 # ── transitions ──────────────────────────────────────────────────────

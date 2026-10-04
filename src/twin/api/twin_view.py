@@ -13,6 +13,7 @@ model learned cross-sectional associations in NHANES. Neither is a validated cau
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from functools import lru_cache
 from typing import Any
 from uuid import UUID
@@ -40,6 +41,8 @@ def _rows(result) -> list[dict]:
 
 
 def _clean(value: Any) -> Any:
+    if isinstance(value, Decimal):  # numeric columns: JSON numbers, not strings
+        value = float(value)
     if isinstance(value, float) and not np.isfinite(value):
         return None
     if isinstance(value, (np.floating, np.integer)):

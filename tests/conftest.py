@@ -33,6 +33,10 @@ class FakeLoader:
         self.loads += 1
         return list(self.stored[patient_id])
 
+    async def series(self, patient_id, metrics, since, until):
+        return {m: sorted((r.time, float(r.value)) for r in self.stored[patient_id]
+                          if r.metric == m and since <= r.time <= until) for m in metrics}
+
 
 class FakeStore:
     def __init__(self):

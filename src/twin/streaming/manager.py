@@ -52,6 +52,10 @@ class StateLoader(Protocol):
         """What the state is rebuilt from: the latest reading per metric, the glucose
         readings in the trend window, and today's steps."""
 
+    async def series(self, patient_id: UUID, metrics: Sequence[str], since: datetime,
+                     until: datetime) -> dict[str, list[tuple[datetime, float]]]:
+        """Chart points per metric (live readings plus the recorded history before them)."""
+
 
 class TransitionStore(Protocol):
     async def save(self, patient_id: UUID, items: Sequence[Transition], version: int) -> None: ...
@@ -106,6 +110,10 @@ class PatientTwinStateManager:
 
     async def snapshot(self, patient_id: UUID) -> dict[str, Any]:
         return (await self.get(patient_id)).to_dict(self.rules.tz)
+
+    def cached(self, patient_id: UUID) -> PatientTwinState | None:
+        """The state if it is loaded; never touches the database."""
+        return self._states.get(patient_id)
 
     def version(self, patient_id: UUID) -> int | None:
         state = self._states.get(patient_id)

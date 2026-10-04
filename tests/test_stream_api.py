@@ -89,3 +89,24 @@ def test_ingest_validates_events(client):
 def test_unknown_device_is_rejected_not_fatal(client, loader):
     r = client.post("/ingest/events", json={"events": [glucose(99, 0, 100)]}).json()
     assert r["accepted"] == 0 and r["rejected"] == [{"index": 0, "reason": "unknown device 99"}]
+
+
+def test_readings_returns_points_in_the_window(client, loader):
+    pid = loader.add()
+    device = client.post(f"/patients/{pid}/devices", json={"kind": "cgm"}).json()["device_id"]
+    client.post("/ingest/events", json={"events": [glucose(device, m, 100 + m) for m in (0, 5, 10, 300)]})
+    until = (T0 + timedelta(minutes=10)).isoformat()
+    body = client.get(f"/patients/{pid}/readings", params={"metrics": "glucose", "until": until, "hours": 1}).json()
+    assert body["series"]["glucose"] == [["2026-10-04T09:00:00-05:00", 100.0], ["2026-10-04T09:05:00-05:00", 105.0],
+                                         ["2026-10-04T09:10:00-05:00", 110.0]]
+    assert client.get(f"/patients/{pid}/readings", params={"metrics": "nope"}).status_code == 422
+
+
+def test_websocket_rejects_foreign_browser_origins(client, loader):
+    pid = loader.add()
+    with pytest.raises(WebSocketDisconnect) as closed:
+        with client.websocket_connect(f"/ws/patients/{pid}/state", headers={"origin": "https://evil.example"}) as ws:
+            ws.receive_json()
+    assert closed.value.code == 4403
+    with client.websocket_connect(f"/ws/patients/{pid}/state", headers={"origin": "http://localhost:3000"}) as ws:
+        assert ws.receive_json()["type"] == "snapshot"

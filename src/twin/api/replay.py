@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, text
 
 from twin.api.ingest import router as ingest_router
@@ -62,7 +62,9 @@ async def health() -> dict:
 
 
 @app.get("/patients")
-async def patients(tag: str | None = None) -> list[dict]:
+async def patients(request: Request, tag: str | None = None) -> list[dict]:
+    """Patients with their sensor window and, for twins loaded in this process, a live summary
+    (`live`: streaming flag and latest glucose) so a list can show live badges without sockets."""
     s_, w = v.patient_summary.c, v.sensor_window.c
     stmt = (
         select(s_.patient_id, s_.given_name, s_.family_name, s_.sex, s_.age, s_.source, s_.source_subject_id,
@@ -75,8 +77,20 @@ async def patients(tag: str | None = None) -> list[dict]:
     tz = settings().tz
     async with session_scope() as s:
         rows = (await s.execute(stmt)).mappings().all()
+    twin = request.app.state.twin
+
+    def live(patient_id) -> dict | None:
+        state = twin.cached(patient_id)
+        if state is None:
+            return None
+        g = state.glucose
+        return {"streaming": state.streaming, "version": state.version,
+                "glucose": {"value": g.value, "status": g.status, "trend": g.trend,
+                            "time": g.time.astimezone(tz).isoformat() if g.time else None}}
+
     return [
-        {**row, **{k: row[k].astimezone(tz) for k in ("window_start", "window_end") if row[k] is not None}}
+        {**row, **{k: row[k].astimezone(tz) for k in ("window_start", "window_end") if row[k] is not None},
+         "live": live(row["patient_id"])}
         for row in rows
     ]
 

@@ -17,8 +17,16 @@ from sqlalchemy.dialects.postgresql import insert
 from twin.config import Settings, settings
 from twin.db import lookup, session_scope
 from twin.fhir.client import FhirClient, twin_id
-from twin.models import LabResult, ObservationCode, Patient, PatientTag, Tag
+from twin.models import (
+    DataSource,
+    Observation,
+    ObservationCode,
+    Patient,
+    PatientTag,
+    Tag,
+)
 from twin.models import views as v
+from twin.pipeline.ehr import fhir_patients
 
 TAG_SYSTEM = "urn:healthcare-digital-twin:tags"
 OVERRIDE_TAG = {"system": TAG_SYSTEM, "code": "composite-override",
@@ -119,8 +127,9 @@ async def _sync_patients(fhir: FhirClient, log) -> list[dict]:
         ps, c = v.patient_summary.c, v.consistency.c
         patients = (await s.execute(
             select(ps.patient_id, ps.race_ethnicity, ps.tags, ps.source_subject_id,
-                   c.hba1c, c.gmi, c.abs_diff, c.status, c.mean_mg_dl, c.device_model)
+                   c.hba1c, c.gmi, c.abs_diff, c.status, c.mean_mg_dl, c.glucose_source)
             .select_from(v.patient_summary.outerjoin(v.consistency, ps.patient_id == c.patient_id))
+            .where(ps.patient_id.in_(fhir_patients()))
             .order_by(ps.source_subject_id)
         )).all()
 
@@ -132,32 +141,39 @@ async def _sync_patients(fhir: FhirClient, log) -> list[dict]:
         current = {t.get("code") for t in patient.get("meta", {}).get("tag", []) if t.get("system") == TAG_SYSTEM}
         await fhir.meta_delete_tags("Patient", pid, [tag_meta[t] for t in current - set(tags) if t in tag_meta])
         patient["meta"] = {"tag": [tag_meta[t] for t in tags]}
-        patient["extension"] = [
-            e for e in patient.get("extension", []) if e["url"] not in (US_CORE_RACE, US_CORE_ETHNICITY)
-        ] + _race_extensions(race_eth)
+        race = _race_extensions(race_eth)
+        if race:  # replace Synthea's race/ethnicity only when the real participant reported one
+            patient["extension"] = [
+                e for e in patient.get("extension", []) if e["url"] not in (US_CORE_RACE, US_CORE_ETHNICITY)
+            ] + race
 
         # Baseline labs, measured then derived.
         async with session_scope() as s:
+            # Only real (non-synthetic) numeric values override the synthetic EHR.
             labs = (await s.execute(
-                select(ObservationCode.loinc, LabResult.value, LabResult.effective_at)
-                .join(ObservationCode, ObservationCode.code_id == LabResult.code_id)
-                .where(LabResult.patient_id == patient_id)
+                select(ObservationCode.loinc, Observation.value_num, Observation.effective_at)
+                .join(ObservationCode, ObservationCode.code_id == Observation.code_id)
+                .join(DataSource, DataSource.source_id == Observation.source_id)
+                .where(Observation.patient_id == patient_id, Observation.value_num.is_not(None),
+                       DataSource.is_synthetic.is_(False))
                 .distinct(ObservationCode.loinc)
-                .order_by(ObservationCode.loinc, LabResult.effective_at.desc())
+                .order_by(ObservationCode.loinc, Observation.effective_at.desc())
             )).all()
             b = v.patient_baseline.c
-            bmi, ldl, effective = (await s.execute(
-                select(b.bmi, b.ldl, b.effective_at).where(b.patient_id == patient_id)
+            bmi, bmi_synth, ldl, ldl_synth, effective = (await s.execute(
+                select(b.bmi, b.bmi_is_synthetic, b.ldl, b.ldl_is_synthetic, b.effective_at)
+                .where(b.patient_id == patient_id)
             )).one()
 
             resources = [patient]
             for loinc, value, at in labs:
                 display, unit = codes[loinc]
                 resources.append(_observation(pid, loinc, display, unit, _num(value), at))
-            if bmi is not None:
+            # Derived values only when every input is real.
+            if bmi is not None and not bmi_synth:
                 resources.append(_observation(pid, "39156-5", *codes["39156-5"], bmi, effective,
                                               derived_from=("29463-7", "8302-2")))
-            if ldl is not None:
+            if ldl is not None and not ldl_synth:
                 resources.append(_observation(pid, "13457-7", *codes["13457-7"], ldl, effective,
                                               derived_from=("2093-3", "2085-9", "2571-8")))
             await fhir.put_all(resources)

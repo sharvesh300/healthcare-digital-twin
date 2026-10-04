@@ -2,7 +2,8 @@
 
 **Principle:** the twin is driven by **CGM plus continuous wearables**. Medication timing
 cannot come from wearables; it comes from records, dose logs or pens. Every value is
-marked real or synthetic.
+marked real or synthetic. Every column is listed in [data-dictionary.md](data-dictionary.md), and how the
+synthetic parts are made is in the [README](../README.md#how-the-synthetic-data-is-created).
 
 ## 1. Available now (all local, works offline)
 

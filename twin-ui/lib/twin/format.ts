@@ -107,6 +107,16 @@ export function statusTone(signal: SignalKey | Transition["signal"], status: str
   return "neutral";
 }
 
+const ABNORMAL: Partial<Record<Transition["signal"], string[]>> = {
+  glucose: ["very_low", "low", "high", "very_high"],
+  glucose_trend: ["rising_fast", "falling_fast"],
+  heart_rate: ["low", "elevated"],
+  spo2: ["borderline", "low"],
+};
+/** A status worth a look: out-of-range glucose, a fast glucose swing, heart rate or SpO₂ out of band. */
+export const isAbnormal = (signal: Transition["signal"], status: string | null | undefined) =>
+  !!status && (ABNORMAL[signal]?.includes(status) ?? false);
+
 /** Device model for display: "Twin simulator Live CGM (simulated)" → "Live CGM (simulated)". */
 export const deviceName = (source: string | null | undefined) => source?.replace(/^Twin (simulator|generator) /, "") ?? null;
 

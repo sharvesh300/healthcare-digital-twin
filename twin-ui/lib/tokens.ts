@@ -55,3 +55,8 @@ export function glucoseBand(v: number): BandKey {
   if (v <= 250) return "high";
   return "very_high";
 }
+
+/** Heart-rate band, as in the backend rules: low below 50, normal up to 100, then elevated. */
+export function heartRateBand(v: number): "low" | "normal" | "elevated" {
+  return v < 50 ? "low" : v <= 100 ? "normal" : "elevated";
+}

@@ -11,7 +11,17 @@ const OFFLINE_AFTER = 3; // failed attempts before "Reconnecting…" becomes "Of
 
 export type StreamSource =
   | { kind: "live" }
-  | { kind: "replay"; start: string; end: string; speed: number; autoplay: boolean };
+  | {
+      kind: "replay";
+      start: string;
+      end: string;
+      speed: number;
+      autoplay: boolean;
+      /** open the session at this moment instead of at start */
+      at?: string;
+      /** also replay what the simulator streamed, not only the recording */
+      live?: boolean;
+    };
 
 export type ReplayCommand =
   | { type: "play" }
@@ -23,6 +33,8 @@ function streamUrl(patientId: string, source: StreamSource): string {
   const base = `${TWIN_WS_URL}/ws/patients/${patientId}/state`;
   if (source.kind === "live") return base;
   const q = new URLSearchParams({ start: source.start, end: source.end, speed: String(source.speed), autoplay: String(source.autoplay) });
+  if (source.at) q.set("at", source.at);
+  if (source.live) q.set("live", "true");
   return `${base}/replay?${q}`;
 }
 

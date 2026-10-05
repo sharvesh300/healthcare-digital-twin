@@ -66,6 +66,10 @@ export function ResultsChart({ detail, visitBase, height = 240 }: { detail: Meas
   const x = (t: number) => M.l + ((t - t0) / (t1 - t0)) * iw;
   const y = (v: number) => M.t + ih - ((v - lo) / (hi - lo)) * ih;
   const single = m.analytes.length === 1 ? m.ranges[m.analytes[0]] : null;
+  const yTicks = niceTicks(lo, hi).filter((v) => v >= lo && v <= hi);
+  // as many decimals as the tick step needs (0.5 → 1, 0.25 → 2)
+  const tickStep = yTicks.length > 1 ? yTicks[1] - yTicks[0] : 1;
+  const tickDigits = Math.min(2, Math.max(0, -Math.floor(Math.log10(tickStep) + 1e-9) + (tickStep % 1 && (tickStep * 10) % 1 ? 1 : 0)));
 
   const spanYears = (t1 - t0) / (365 * 86400_000);
   const xTicks: number[] = [];
@@ -112,10 +116,10 @@ export function ResultsChart({ detail, visitBase, height = 240 }: { detail: Meas
               <line key={a} x1={M.l} x2={W - M.r} y1={y(limit)} y2={y(limit)} stroke={SERIES[i]} strokeDasharray="4 4" opacity={0.5} />
             );
           })}
-          {niceTicks(lo, hi).filter((v) => v >= lo && v <= hi).map((v) => (
+          {yTicks.map((v) => (
             <g key={v}>
               <line x1={M.l} x2={W - M.r} y1={y(v)} y2={y(v)} stroke="var(--line)" />
-              <text x={M.l - 8} y={y(v)} dy="0.32em" textAnchor="end" className="fill-ink-3 text-[11px] tabular-nums">{fmtNumber(v)}</text>
+              <text x={M.l - 8} y={y(v)} dy="0.32em" textAnchor="end" className="fill-ink-3 text-[11px] tabular-nums">{fmtNumber(v, tickDigits)}</text>
             </g>
           ))}
           {xTicks.map((t) => (

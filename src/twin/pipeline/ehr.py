@@ -125,8 +125,19 @@ async def _copy_patient(s, ehr: SyntheaEhr, source_id: int, codes: dict, product
         await s.execute(delete(model).where(model.patient_id == pid, model.source_id == source_id))
 
     concepts = await _concept_ids(s, {(c.system, c.code, c.display) for c in ehr.conditions}
-                                  | {(c.system, c.code, c.display) for c in ehr.coded})
+                                  | {(c.system, c.code, c.display) for c in ehr.coded}
+                                  | {x for e in ehr.encounters for x in (e.type, e.reason) if x})
     stats = {"unit_mismatch": 0, "unmapped_products": set()}
+
+    # Visits first: the rows below point at the visit they were recorded at.
+    concept = lambda coding: concepts[coding[:2]] if coding else None  # noqa: E731
+    if ehr.encounters:
+        await s.execute(insert(Encounter), [
+            {"encounter_id": uuid.UUID(e.encounter_id), "patient_id": pid, "encounter_class": e.encounter_class,
+             "started_at": e.started_at, "ended_at": e.ended_at, "source_id": source_id,
+             "type_concept_id": concept(e.type), "reason_concept_id": concept(e.reason)} for e in ehr.encounters])
+    visits = {e.encounter_id for e in ehr.encounters}
+    visit = lambda ref: uuid.UUID(ref) if ref in visits else None  # noqa: E731
 
     obs: dict[tuple[int, datetime], tuple] = {}
     for n in ehr.numeric:
@@ -134,17 +145,20 @@ async def _copy_patient(s, ehr: SyntheaEhr, source_id: int, codes: dict, product
         if unit and UNIT_ALIASES.get((n.loinc, n.unit), n.unit) != unit:
             stats["unit_mismatch"] += 1
             continue
-        obs[(code_id, n.effective_at)] = (pid, code_id, n.effective_at, Decimal(str(n.value)), None, source_id)
+        obs[(code_id, n.effective_at)] = (pid, code_id, n.effective_at, Decimal(str(n.value)), None, source_id,
+                                          visit(n.encounter_id))
     for c in ehr.coded:
         code_id, _ = codes[c.loinc]
-        obs[(code_id, c.effective_at)] = (pid, code_id, c.effective_at, None, concepts[(c.system, c.code)], source_id)
+        obs[(code_id, c.effective_at)] = (pid, code_id, c.effective_at, None, concepts[(c.system, c.code)], source_id,
+                                          visit(c.encounter_id))
     await copy_records(s, Observation, ("patient_id", "code_id", "effective_at", "value_num", "value_concept_id",
-                                        "source_id"), obs.values())
+                                        "source_id", "encounter_id"), obs.values())
 
     conditions = {(concepts[(c.system, c.code)], c.onset_at): c for c in ehr.conditions}
     if conditions:
         await s.execute(insert(Condition), [
-            {"patient_id": pid, "concept_id": cid, "onset_at": onset, "abated_at": c.abated_at, "source_id": source_id}
+            {"patient_id": pid, "concept_id": cid, "onset_at": onset, "abated_at": c.abated_at, "source_id": source_id,
+             "encounter_id": visit(c.encounter_id)}
             for (cid, onset), c in conditions.items()])
 
     regimens = []
@@ -160,14 +174,10 @@ async def _copy_patient(s, ehr: SyntheaEhr, source_id: int, codes: dict, product
                 "ended_at": ep.ended_at, "dose_value": dose, "dose_unit": unit,
                 "times_per_day": Decimal(str(round(ep.times_per_day, 2))) if ep.times_per_day else None,
                 "as_needed": ep.as_needed, "source_id": source_id, "source_ref": ep.first_request_id,
+                "product_rxcui": ep.product_rxcui, "encounter_id": visit(ep.encounter_id),
             })
     if regimens:
         await s.execute(insert(MedicationRegimen), regimens)
-
-    if ehr.encounters:
-        await s.execute(insert(Encounter), [
-            {"encounter_id": uuid.UUID(e.encounter_id), "patient_id": pid, "encounter_class": e.encounter_class,
-             "started_at": e.started_at, "ended_at": e.ended_at, "source_id": source_id} for e in ehr.encounters])
 
     return {"observations": len(obs), "conditions": len(conditions), "regimens": len(regimens),
             "encounters": len(ehr.encounters), "unit_mismatch": stats["unit_mismatch"],

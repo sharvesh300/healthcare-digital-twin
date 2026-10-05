@@ -17,6 +17,7 @@ def _bundle(tmp_path):
                           {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 132, "code": "mm[Hg]"}},
                           {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 84, "code": "mm[Hg]"}}]}},
         {"resource": {"resourceType": "Observation", "effectiveDateTime": "2026-01-01T09:00:00+00:00",
+                      "encounter": {"reference": "urn:uuid:e1"},
                       "code": {"coding": [{"code": "4548-4"}]}, "valueQuantity": {"value": 7.4, "code": "%"}}},
         {"resource": {"resourceType": "Observation", "effectiveDateTime": "2026-01-01T09:00:00+00:00",
                       "code": {"coding": [{"code": "72166-2"}]},
@@ -24,10 +25,12 @@ def _bundle(tmp_path):
         {"resource": {"resourceType": "Observation", "effectiveDateTime": "2026-01-01T09:00:00+00:00",
                       "code": {"coding": [{"code": "72514-3"}]}, "valueQuantity": {"value": 3, "code": "{score}"}}},
         {"resource": {"resourceType": "Condition", "onsetDateTime": "2015-03-01T00:00:00+00:00",
+                      "encounter": {"reference": "Encounter/e1"},
                       "code": {"coding": [{"system": SCT, "code": "44054006", "display": "Diabetes mellitus type 2"}]}}},
         {"fullUrl": "urn:uuid:med1", "resource": {"resourceType": "Medication",
                                                   "code": {"coding": [{"system": RX, "code": "106892"}]}}},
         {"resource": {"resourceType": "MedicationRequest", "id": "mr1", "status": "active",
+                      "encounter": {"reference": "urn:uuid:e1"},
                       "authoredOn": "2025-06-01T00:00:00+00:00", "medicationReference": {"reference": "urn:uuid:med1"}}},
         {"resource": {"resourceType": "MedicationRequest", "id": "mr2", "status": "stopped",
                       "authoredOn": "2024-01-01T00:00:00+00:00",
@@ -35,6 +38,8 @@ def _bundle(tmp_path):
                       "dosageInstruction": [{"timing": {"repeat": {"frequency": 2, "period": 1, "periodUnit": "d"}},
                                              "doseAndRate": [{"doseQuantity": {"value": 1}}]}]}},
         {"resource": {"resourceType": "Encounter", "id": "e1", "class": {"code": "AMB"},
+                      "type": [{"coding": [{"system": SCT, "code": "162673000", "display": "General examination"}]}],
+                      "reasonCode": [{"coding": [{"system": SCT, "code": "38341003", "display": "Hypertension"}]}],
                       "period": {"start": "2026-01-01T08:45:00+00:00", "end": "2026-01-01T09:15:00+00:00"}}},
     ]
     path = tmp_path / "bundle.json"
@@ -51,6 +56,18 @@ def test_parse_bundle(tmp_path):
     assert set(products) == {"106892", "860975"}  # one via a Medication resource in the bundle
     assert products["860975"].times_per_day == 2 and products["860975"].dose_quantity == 1
     assert [(e.encounter_class, e.encounter_id) for e in ehr.encounters] == [(EncounterClass.ambulatory, "e1")]
+    assert ehr.encounters[0].type == (SCT, "162673000", "General examination")
+    assert ehr.encounters[0].reason == (SCT, "38341003", "Hypertension")
+
+
+def test_entries_keep_the_visit_they_were_recorded_at(tmp_path):
+    ehr = parse_bundle(_bundle(tmp_path), {"8480-6", "8462-4", "4548-4"})
+    assert {n.loinc: n.encounter_id for n in ehr.numeric} == {"4548-4": "e1", "8480-6": None, "8462-4": None}
+    assert [c.encounter_id for c in ehr.conditions] == ["e1"]
+    by_request = {m.request_id: m.encounter_id for m in ehr.medications}
+    assert by_request == {"mr1": "e1", "mr2": None}
+    episodes = {e.product_rxcui: e.encounter_id for e in regimen_episodes(ehr.medications)}
+    assert episodes == {"106892": "e1", "860975": None}
 
 
 def test_regimen_episodes_merge_repeat_orders():

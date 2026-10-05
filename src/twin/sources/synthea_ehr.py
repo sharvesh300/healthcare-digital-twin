@@ -7,7 +7,10 @@ Only what the twin models is extracted:
   * Condition    -> code, onset, abatement
   * MedicationRequest -> RxNorm product, authored date, status, dosage (inline code or a
                     Medication resource in the bundle)
-  * Encounter    -> class and period
+  * Encounter    -> class, period, type and reason (SNOMED CT)
+
+Observations, conditions and medication requests keep the id of the encounter they were
+recorded at, so the record can show what happened at each visit.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ class NumericValue:
     effective_at: datetime
     value: float
     unit: str | None
+    encounter_id: str | None = None
 
 
 @dataclass
@@ -42,6 +46,7 @@ class CodedValue:
     system: str
     code: str
     display: str
+    encounter_id: str | None = None
 
 
 @dataclass
@@ -51,6 +56,7 @@ class ConditionRecord:
     display: str
     onset_at: datetime
     abated_at: datetime | None
+    encounter_id: str | None = None
 
 
 @dataclass
@@ -63,6 +69,10 @@ class MedicationOrder:
     dose_quantity: float | None = None
     times_per_day: float | None = None
     as_needed: bool = False
+    encounter_id: str | None = None
+
+
+Coding = tuple[str, str, str]  # system, code, display
 
 
 @dataclass
@@ -71,6 +81,8 @@ class EncounterRecord:
     encounter_class: EncounterClass
     started_at: datetime
     ended_at: datetime | None
+    type: Coding | None = None
+    reason: Coding | None = None
 
 
 @dataclass
@@ -89,6 +101,20 @@ def _dt(value: str | None) -> datetime | None:
 
 def _effective(r: dict) -> datetime | None:
     return _dt(r.get("effectiveDateTime") or (r.get("effectivePeriod") or {}).get("start"))
+
+
+def _encounter(r: dict) -> str | None:
+    """Id of the encounter a resource was recorded at ("urn:uuid:<id>" or "Encounter/<id>")."""
+    ref = (r.get("encounter") or {}).get("reference")
+    return ref.rsplit(":", 1)[-1].rsplit("/", 1)[-1] if ref else None
+
+
+def _coding(concepts: list | None) -> Coding | None:
+    for concept in concepts or []:
+        for c in concept.get("coding", []):
+            if c.get("system") and c.get("code"):
+                return c["system"], c["code"], c.get("display", c["code"])
+    return None
 
 
 def _rxnorm(concept: dict | None) -> tuple[str, str] | None:
@@ -125,23 +151,24 @@ def parse_bundle(path: Path, loinc_codes: set[str]) -> SyntheaEhr:
             if at is None:
                 continue
             code = r["code"]["coding"][0]["code"]
+            enc = _encounter(r)
             if code in loinc_codes and "valueQuantity" in r:
                 q = r["valueQuantity"]
-                ehr.numeric.append(NumericValue(code, at, float(q["value"]), q.get("code") or q.get("unit")))
+                ehr.numeric.append(NumericValue(code, at, float(q["value"]), q.get("code") or q.get("unit"), enc))
             elif code in loinc_codes and "valueCodeableConcept" in r:
                 c = r["valueCodeableConcept"]["coding"][0]
-                ehr.coded.append(CodedValue(code, at, c["system"], c["code"], c.get("display", c["code"])))
+                ehr.coded.append(CodedValue(code, at, c["system"], c["code"], c.get("display", c["code"]), enc))
             for comp in r.get("component", []):
                 ccode = comp["code"]["coding"][0]["code"]
                 if ccode in loinc_codes and "valueQuantity" in comp:
                     q = comp["valueQuantity"]
-                    ehr.numeric.append(NumericValue(ccode, at, float(q["value"]), q.get("code") or q.get("unit")))
+                    ehr.numeric.append(NumericValue(ccode, at, float(q["value"]), q.get("code") or q.get("unit"), enc))
         elif kind == "Condition":
             c = r["code"]["coding"][0]
             onset = _dt(r.get("onsetDateTime") or r.get("recordedDate"))
             if onset:
                 ehr.conditions.append(ConditionRecord(c["system"], c["code"], c.get("display", c["code"]), onset,
-                                                      _dt(r.get("abatementDateTime"))))
+                                                      _dt(r.get("abatementDateTime")), _encounter(r)))
         elif kind == "MedicationRequest":
             coded = _rxnorm(r.get("medicationCodeableConcept"))
             if coded is None and "medicationReference" in r:
@@ -150,12 +177,13 @@ def parse_bundle(path: Path, loinc_codes: set[str]) -> SyntheaEhr:
             if coded and authored:
                 dose, times, as_needed = _dosage(r)
                 ehr.medications.append(MedicationOrder(r["id"], coded[0], coded[1], authored, r.get("status", ""),
-                                                       dose, times, as_needed))
+                                                       dose, times, as_needed, _encounter(r)))
         elif kind == "Encounter":
             period = r.get("period") or {}
             cls = ENCOUNTER_CLASS.get((r.get("class") or {}).get("code"))
             if cls and period.get("start"):
-                ehr.encounters.append(EncounterRecord(r["id"], cls, _dt(period["start"]), _dt(period.get("end"))))
+                ehr.encounters.append(EncounterRecord(r["id"], cls, _dt(period["start"]), _dt(period.get("end")),
+                                                      _coding(r.get("type")), _coding(r.get("reasonCode"))))
     return ehr
 
 
@@ -169,6 +197,7 @@ class RegimenEpisode:
     dose_quantity: float | None
     times_per_day: float | None
     as_needed: bool
+    encounter_id: str | None = None  # where it was first prescribed
 
 
 def regimen_episodes(orders: list[MedicationOrder]) -> list[RegimenEpisode]:
@@ -184,6 +213,6 @@ def regimen_episodes(orders: list[MedicationOrder]) -> list[RegimenEpisode]:
         episodes.append(RegimenEpisode(
             product, last.display, first.request_id, first.authored_at,
             None if last.status == "active" else last.authored_at,
-            last.dose_quantity, last.times_per_day, last.as_needed,
+            last.dose_quantity, last.times_per_day, last.as_needed, first.encounter_id,
         ))
     return episodes

@@ -14,6 +14,7 @@ from decimal import Decimal
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Interval,
     Numeric,
@@ -32,9 +33,14 @@ from twin.models.reference import (
     DataSource,
     DeviceModel,
     Medication,
+    MedicationProduct,
     ObservationCode,
     Tag,
 )
+
+
+# core.encounter is declared below the tables that point at it.
+ENCOUNTER_ID = "core.encounter.encounter_id"
 
 
 class Patient(Base):
@@ -97,6 +103,7 @@ class Observation(Base):
     __table_args__ = (
         CheckConstraint("num_nonnulls(value_num, value_concept_id) = 1", name="one_value"),
         Index(None, "code_id"),
+        Index(None, "encounter_id"),
         {"schema": "core"},
     )
 
@@ -106,6 +113,8 @@ class Observation(Base):
     value_num: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     value_concept_id: Mapped[int | None] = mapped_column(ForeignKey(Concept.concept_id))
     source_id: Mapped[int] = mapped_column(SmallInteger, ForeignKey(DataSource.source_id))
+    encounter_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(ENCOUNTER_ID, ondelete="SET NULL"),
+                                                           comment="the visit it was recorded at")
 
 
 class Condition(Base):
@@ -114,6 +123,7 @@ class Condition(Base):
     __tablename__ = "condition"
     __table_args__ = (
         CheckConstraint("abated_at IS NULL OR abated_at >= onset_at", name="abatement_after_onset"),
+        Index(None, "encounter_id"),
         {"schema": "core"},
     )
 
@@ -122,17 +132,23 @@ class Condition(Base):
     onset_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
     abated_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ)
     source_id: Mapped[int] = mapped_column(SmallInteger, ForeignKey(DataSource.source_id))
+    encounter_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(ENCOUNTER_ID, ondelete="SET NULL"),
+                                                           comment="the visit it was diagnosed at")
 
 
 class MedicationRegimen(Base):
     """A prescribed/standing medication at ingredient level. Combination products give one
-    row per ingredient. dose_value is per administration, in dose_unit."""
+    row per ingredient. dose_value is per administration, in dose_unit; product_rxcui is the
+    product prescribed (strength and form), when known."""
 
     __tablename__ = "medication_regimen"
     __table_args__ = (
         UniqueConstraint("patient_id", "source_id", "source_ref", "medication_id"),
         CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="end_after_start"),
         CheckConstraint("times_per_day IS NULL OR times_per_day > 0", name="times_per_day"),
+        ForeignKeyConstraint(["product_rxcui", "medication_id"],
+                             [MedicationProduct.product_rxcui, MedicationProduct.medication_id]),
+        Index(None, "encounter_id"),
         {"schema": "core"},
     )
 
@@ -147,6 +163,9 @@ class MedicationRegimen(Base):
     as_needed: Mapped[bool] = mapped_column(server_default=false())
     source_id: Mapped[int] = mapped_column(SmallInteger, ForeignKey(DataSource.source_id))
     source_ref: Mapped[str] = mapped_column(comment="id of the source record, for idempotent reloads")
+    product_rxcui: Mapped[str | None]
+    encounter_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(ENCOUNTER_ID, ondelete="SET NULL"),
+                                                           comment="the visit it was first prescribed at")
 
 
 class MedicationDose(Base):
@@ -165,7 +184,8 @@ class MedicationDose(Base):
 
 
 class Encounter(Base):
-    """Visits, for the patient timeline."""
+    """Visits. Observations, conditions and medication regimens point at the visit they were
+    recorded at. type and reason are SNOMED CT concepts ("General examination", and why)."""
 
     __tablename__ = "encounter"
     __table_args__ = (
@@ -180,6 +200,8 @@ class Encounter(Base):
     started_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ)
     ended_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ)
     source_id: Mapped[int] = mapped_column(SmallInteger, ForeignKey(DataSource.source_id))
+    type_concept_id: Mapped[int | None] = mapped_column(ForeignKey(Concept.concept_id))
+    reason_concept_id: Mapped[int | None] = mapped_column(ForeignKey(Concept.concept_id))
 
 
 class Device(Base):

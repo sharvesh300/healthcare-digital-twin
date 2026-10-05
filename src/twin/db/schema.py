@@ -52,6 +52,20 @@ HYPERTABLES = (GlucoseReading, WearableSample, GlucoseFused, TwinStateTransition
 # Columns added after a table was first created (create_all never alters existing tables).
 ADDED_COLUMNS = (
     "ALTER TABLE ref.device_model ADD COLUMN IF NOT EXISTS is_live_simulator boolean NOT NULL DEFAULT false",
+    # the record: visit type and reason, entry -> visit links, the product prescribed
+    "ALTER TABLE core.encounter ADD COLUMN IF NOT EXISTS type_concept_id integer REFERENCES ref.concept",
+    "ALTER TABLE core.encounter ADD COLUMN IF NOT EXISTS reason_concept_id integer REFERENCES ref.concept",
+    *(f"ALTER TABLE core.{t} ADD COLUMN IF NOT EXISTS encounter_id uuid REFERENCES core.encounter ON DELETE SET NULL"
+      for t in ("observation", "condition", "medication_regimen")),
+    *(f"CREATE INDEX IF NOT EXISTS {t}_encounter_id_idx ON core.{t} (encounter_id)"
+      for t in ("observation", "condition", "medication_regimen")),
+    "ALTER TABLE core.medication_regimen ADD COLUMN IF NOT EXISTS product_rxcui varchar",
+    """DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'medication_regimen_product_rxcui_fkey') THEN
+           ALTER TABLE core.medication_regimen ADD CONSTRAINT medication_regimen_product_rxcui_fkey
+             FOREIGN KEY (product_rxcui, medication_id) REFERENCES ref.medication_product (product_rxcui, medication_id);
+         END IF;
+       END $$""",
 )
 
 # Reference vocabularies seeded from seeds/reference/<table>.csv, in FK order.

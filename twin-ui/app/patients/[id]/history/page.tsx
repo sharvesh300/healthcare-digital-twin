@@ -17,7 +17,7 @@ export default async function HistoryPage({ params }: PageProps<"/patients/[id]/
         {timeline.start ? <> from {fmtDateTime(timeline.start)} to {fmtDateTime(timeline.end)}</> : null}. Live streamed readings are kept out of this view.
       </p>
       {timeline.series.length ? (
-        <HistoryCharts timeline={timeline} />
+        <HistoryCharts patientId={id} timeline={timeline} />
       ) : (
         <div className="rounded-card border border-line bg-surface px-6 py-12 text-center text-sm text-ink-3 shadow-card">{timeline.note ?? "No recorded series for this patient."}</div>
       )}

@@ -372,6 +372,7 @@ export interface VisitTest extends ResultBrief {
   panel: string;
   unit: string | null;
   digits: number;
+  analytes: string[];
 }
 
 export interface VisitDetail {

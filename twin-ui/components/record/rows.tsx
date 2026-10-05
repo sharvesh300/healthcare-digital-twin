@@ -12,7 +12,8 @@ import { ResultSpark } from "./spark";
 
 /** A list of record rows: hairline dividers, rows are links. */
 export function RowList({ children, className }: { children: ReactNode; className?: string }) {
-  return <ul className={cn("-mx-2 divide-y divide-line", className)}>{children}</ul>;
+  // a container: rows lay out by the list's width, so the same row fits a page or a side card
+  return <ul className={cn("@container -mx-2 divide-y divide-line", className)}>{children}</ul>;
 }
 
 function RowLink({ href, children, className, label }: { href: string; children: ReactNode; className?: string; label?: string }) {
@@ -34,12 +35,12 @@ export function MeasureRow({ m, href }: { m: MeasureSummary; href: string }) {
   const range = rangeText(m);
   return (
     <RowLink href={href} label={`${m.display}: ${resultValue(m, m.latest)} ${m.unit ?? ""}`}>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_96px_minmax(170px,auto)]">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 @xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_96px_minmax(170px,auto)]">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-ink">{m.display}</p>
           <p className="truncate text-xs text-ink-3">{range ? `Range ${range}` : m.panel_display}</p>
         </div>
-        <div className="flex items-center justify-end gap-2 sm:justify-start">
+        <div className="flex items-center justify-end gap-2 @xl:justify-start">
           <span className="text-sm font-semibold tabular-nums text-ink">
             {resultValue(m, m.latest)}
             {m.unit && !m.latest.text && <span className="ml-1 text-xs font-normal text-ink-3">{m.unit}</span>}
@@ -47,8 +48,8 @@ export function MeasureRow({ m, href }: { m: MeasureSummary; href: string }) {
           <FlagChip flag={m.latest.flag} />
           {delta && delta !== "no change" && <span className="text-xs tabular-nums text-ink-3" title="Change since the previous result">{delta}</span>}
         </div>
-        <ResultSpark points={m.spark} range={m.ranges[m.analytes[0]]} className="hidden sm:block" />
-        <div className="col-span-2 flex items-center gap-2 whitespace-nowrap text-xs text-ink-3 sm:col-span-1 sm:justify-end">
+        <ResultSpark points={m.spark} range={m.ranges[m.analytes[0]]} className="hidden @xl:block" />
+        <div className="col-span-2 flex items-center gap-2 whitespace-nowrap text-xs text-ink-3 @xl:col-span-1 @xl:justify-end">
           <span className="tabular-nums">{fmtDay(m.latest.at)}</span>
           <span className="tabular-nums">· {m.count} result{m.count === 1 ? "" : "s"}</span>
           {m.is_synthetic && <Synthetic />}
@@ -87,7 +88,7 @@ export function ConditionRow({ c, href }: { c: ConditionSummary; href: string })
 export function MedicationRow({ m, href }: { m: MedicationSummary; href: string }) {
   return (
     <RowLink href={href}>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-1 @xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] @xl:items-center">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <p className="truncate text-sm font-medium text-ink">{capitalise(m.medication)}</p>
@@ -103,7 +104,7 @@ export function MedicationRow({ m, href }: { m: MedicationSummary; href: string 
             {m.dosage.text ? capitalise(m.dosage.text) : "Dose not recorded"}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-ink-3 sm:justify-end">
+        <div className="flex items-center gap-2 text-xs text-ink-3 @xl:justify-end">
           <span className="tabular-nums">{m.active ? `since ${fmtMonth(m.started_at)}` : `${fmtMonth(m.started_at)} – ${fmtMonth(m.ended_at)}`}</span>
           <StatusPill active={m.active} inactive="Stopped" />
           {m.is_synthetic && <Synthetic />}

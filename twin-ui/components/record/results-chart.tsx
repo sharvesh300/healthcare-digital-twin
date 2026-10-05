@@ -84,15 +84,15 @@ export function ResultsChart({ detail, visitBase, height = 240 }: { detail: Meas
   const tickLabel = (t: number) =>
     spanYears >= 2 ? String(new Date(t).getUTCFullYear()) : new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
 
-  const onMove = (e: React.PointerEvent<SVGRectElement>) => {
+  const nearest = (e: React.MouseEvent<SVGRectElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const t = t0 + ((e.clientX - rect.left) / rect.width) * (t1 - t0);
     let best = 0;
     times.forEach((tt, i) => Math.abs(tt - t) < Math.abs(times[best] - t) && (best = i));
-    setHover(best);
+    return best;
   };
-  const open = (i: number | null) => {
-    const v = i != null ? results[i].visit : null;
+  const open = (i: number) => {
+    const v = results[i].visit;
     if (v) router.push(`${visitBase}/${v.encounter_id}`);
   };
   const h = hover != null ? results[hover] : null;
@@ -144,7 +144,7 @@ export function ResultsChart({ detail, visitBase, height = 240 }: { detail: Meas
             <line x1={x(times[hover!])} x2={x(times[hover!])} y1={M.t} y2={M.t + ih} stroke="var(--ink-3)" strokeDasharray="2 3" pointerEvents="none" />
           )}
           <rect x={M.l - 8} y={M.t} width={iw + 16} height={ih} fill="transparent" className={h?.visit ? "cursor-pointer" : undefined}
-            onPointerMove={onMove} onPointerLeave={() => setHover(null)} onClick={() => open(hover)} />
+            onPointerMove={(e) => setHover(nearest(e))} onPointerLeave={() => setHover(null)} onClick={(e) => open(nearest(e))} />
         </svg>
       )}
       <AnimatePresence>

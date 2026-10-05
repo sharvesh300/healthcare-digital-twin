@@ -503,9 +503,23 @@ A Next.js dashboard shows each patient's twin. The **Live** tab has:
 - A glucose card with band, trend, a sparkline and today's time in range.
 - Vital-sign cards, glucose and heart-rate charts with a live tail, and a "what changed" feed.
 
-The **History** tab shows the recorded 5-minute series and daily CGM metrics. The **Record** tab
-shows baseline labs, conditions and medications, with synthetic values flagged. **Predict** is
-reserved for the forecast and what-if modules.
+The **Record** tab is the patient record. An overview holds:
+- summary tiles: active medications and diagnoses, headline tests, and the last visit;
+- medications with product and dosage;
+- diagnoses and social findings, with recurring episodes counted;
+- tests and vitals by panel, with High/Low flags against adult reference ranges and trends;
+- recent visits;
+- the CGM summary with daily metrics.
+
+Every row opens a detail page:
+- every result of a test, charted (SBP and DBP together for blood pressure);
+- every episode of a diagnosis;
+- every prescription of a medication, with dose changes;
+- everything recorded at a visit.
+
+Each entry links to the visit it was recorded at and to related entries. Synthetic values are
+flagged throughout. **Predict** is reserved for the forecast and what-if modules. The old
+History tab now redirects to Record, since the Live tab's replay covers the recorded days.
 
 On the Live tab, **Replay** switches the same view to a recorded window. Pick a preset or a
 From / To time, press play, then scrub or change the speed (30–600×).
@@ -516,10 +530,14 @@ protocol, so every component is reused, and it takes play, pause, seek and speed
 
 Click any chart point, or any "What changed" event, to inspect that moment: the replay opens
 paused there and shows the whole twin as it was (figure, vitals, activity, sleep), ready to
-play on. The URL (`/patients/{id}?at=<iso>`) links straight to it; the History charts use it.
+play on. The URL (`/patients/{id}?at=<iso>`) links straight to it; the record's CGM section uses it.
 
 The dashboard uses `GET /patients/{id}/readings` (chart points: live readings plus the recorded
-history before them) and the `live` summary in `GET /patients`. The WebSocket accepts browser
+history before them) and the `live` summary in `GET /patients`. The record reads
+`GET /patients/{id}/record`, its list endpoints (`/tests`, `/conditions`, `/medications`, and
+`/visits`, which pages with a cursor) and one detail endpoint per kind (`/tests/{measure}`,
+`/conditions/{concept_id}`, `/medications/{rxcui}`, `/visits/{encounter_id}`). See
+`src/twin/api/record.py`. The WebSocket accepts browser
 origins from `ALLOWED_ORIGINS`. See [twin-ui/README.md](twin-ui/README.md) and
 [docs/plans/twin-dashboard-ui.md](docs/plans/twin-dashboard-ui.md).
 

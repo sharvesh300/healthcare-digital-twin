@@ -89,6 +89,7 @@ Every EHR row carries a `source_id`: `synthea` marks synthetic rows, and `cgmacr
 | `value_num` | numeric | Numeric value in the code's UCUM unit |
 | `value_concept_id` | int → `ref.concept` | Coded value, e.g. smoking status (SNOMED) |
 | `source_id` | smallint → `ref.data_source` | Where the row came from |
+| `encounter_id` | uuid → `core.encounter` | The visit it was recorded at (from the FHIR resource's `encounter`; null for study data) |
 
 The primary key is (`patient_id`, `code_id`, `effective_at`). Each row has exactly one of
 `value_num` or `value_concept_id`.
@@ -155,6 +156,7 @@ ShanghaiT2DM and AI-READI, so those sources load without schema changes.
 | `onset_at` | timestamptz | Onset time |
 | `abated_at` | timestamptz | Null while the condition is active |
 | `source_id` | smallint | Where the row came from |
+| `encounter_id` | uuid → `core.encounter` | The visit it was diagnosed at |
 
 | | CGMacros | BIG IDEAs | NHANES |
 |---|---|---|---|
@@ -181,6 +183,8 @@ Condition groups:
 | `as_needed` | bool | PRN flag |
 | `source_id` | smallint | Where the row came from |
 | `source_ref` | text | Source record id, e.g. the FHIR MedicationRequest id |
+| `product_rxcui` | text → `ref.medication_product` (with `medication_id`) | The product prescribed (strength and form), e.g. "Warfarin Sodium 5 MG Oral Tablet" |
+| `encounter_id` | uuid → `core.encounter` | The visit it was first prescribed at |
 
 `core.medication_dose` holds timed administrations, such as insulin pen or pill logs. It is a hypertable-ready time series:
 
@@ -211,6 +215,8 @@ Drug classes come from ATC. The 22 classes are:
 | `encounter_class` | enum | `ambulatory`, `emergency`, `inpatient`, `virtual` or `home` |
 | `started_at`, `ended_at` | timestamptz | Encounter period |
 | `source_id` | smallint | Where the row came from |
+| `type_concept_id` | int → `ref.concept` | What the visit was (SNOMED CT), e.g. "General examination of patient" |
+| `reason_concept_id` | int → `ref.concept` | Why, when recorded, e.g. "Acute bronchitis" |
 
 | | CGMacros | BIG IDEAs | NHANES |
 |---|---|---|---|
@@ -375,7 +381,10 @@ These views are read-only and computed on demand. They prefer real values over s
 | `patient_baseline` | patient | patient_id, effective_at, hba1c, fasting_glucose, glucose_2h_postprandial, insulin, c_peptide, total_cholesterol, hdl, triglycerides, weight_kg, height_cm, sbp, dbp, creatinine, uacr, alt, ast, uric_acid, smoking_status, **bmi**, bmi_is_synthetic, **non_hdl**, **tc_hdl_ratio**, **vldl**, **ldl** (Friedewald), ldl_is_synthetic, **homa_ir**, homa_ir_is_synthetic, **egfr** (CKD-EPI 2021), egfr_is_synthetic, **cohort** (`normal` / `prediabetes` / `t2d` from HbA1c), synthetic_analytes |
 | `observation_latest` | patient × analyte | patient_id, analyte, loinc, category, effective_at, value_num, value_display, ucum_unit, source, is_synthetic |
 | `patient_conditions` | patient × condition group | patient_id, condition_group, first_onset, active, conditions, all_synthetic |
-| `medication_regimen` | regimen | patient_id, regimen_id, rxcui, medication, drug_class, glucose_lowering, started_at, ended_at, active, dose_value, dose_unit, times_per_day, as_needed, source, is_synthetic |
+| `medication_regimen` | regimen | patient_id, regimen_id, rxcui, medication, product_rxcui, **product**, drug_class, drug_class_display, glucose_lowering, started_at, ended_at, active, dose_value, dose_unit, times_per_day, as_needed, encounter_id, source, is_synthetic |
+| `condition_episode` | condition episode | patient_id, concept_id, system, code, **display** (SNOMED tag stripped), **kind** (`diagnosis` / `finding`), condition_group, condition_group_display, onset_at, abated_at, active, encounter_id, source, is_synthetic |
+| `observation_result` | result | patient_id, analyte, loinc, loinc_display, category, effective_at, value_num, value_text, ucum_unit, encounter_id, source, is_synthetic |
+| `visit` | encounter | patient_id, encounter_id, encounter_class, **type**, **reason**, started_at, ended_at, source, is_synthetic |
 | `cgm_daily` | patient × day (fused) | patient_id, day, n, coverage_pct, mean_mg_dl, cv_pct, gmi, pct_very_low, pct_low, pct_target, pct_high, pct_very_high |
 | `cgm_window` | patient | patient_id, glucose_source, method_version, period_start, period_end, n, mean_mg_dl, gmi |
 | `cgm_device_daily` | patient × device × day (raw) | patient_id, day, device_id, device_model, n, coverage_pct, mean_mg_dl, cv_pct, gmi, pct_very_low … pct_very_high |

@@ -62,7 +62,22 @@ The API accepts WebSocket connections only from the origins in `ALLOWED_ORIGINS`
   that moment (`at=`), so the figure, cards and feed show the whole twin as it was. A
   "What changed" event (filter **All / Alerts**) does the same in one click. Out-of-range runs
   are shaded on the charts. The moment is kept in the URL (`/patients/{id}?at=<iso>`), and the
-  History charts link there too.
+  record's CGM section links there too.
+- **The record** (`app/patients/[id]/record/`) reads `/patients/{id}/record/*`:
+  - The overview has summary tiles and the sections.
+  - The list pages are `tests`, `conditions`, `medications` and `visits`. Their filters live in
+    the URL query and are rendered as links, with no client code.
+  - Each kind of entry has one detail page.
+
+  Every page is a server component built from `components/record/`:
+  - rows: `MeasureRow`, `ConditionRow`, `MedicationRow` and `VisitRow`. They use container
+    queries, so the same row fits a page or a side card.
+  - `DetailHeader`, `EntryTable` (stacks on phones) and `RelatedCard`.
+  - `ResultsChart`, where a click on a result opens its visit.
+  - `EpisodeTimeline`, `FilterLinks`, `FlagChip` and `Synthetic`.
+
+  Routes come from `lib/record/href.ts`, and an unknown entry renders the record's `not-found`.
+  A new kind of entry needs one endpoint and one page from these parts.
 - **The figure** carries every signal: heart rate and HRV beside the heart, SpO₂ and breathing
   at the lungs, the CGM on the arm, steps or energy on the watch, a stress halo around the head
   (score 0–99: rest, low, medium, high), and a wristband with skin temperature and EDA (its

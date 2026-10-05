@@ -76,6 +76,15 @@ The API accepts WebSocket connections only from the origins in `ALLOWED_ORIGINS`
   - `ResultsChart`, where a click on a result opens its visit.
   - `EpisodeTimeline`, `FilterLinks`, `FlagChip` and `Synthetic`.
 
+  Sections open and close (`components/record/collapsible.tsx`):
+  - `CollapsibleSection` is a card with a preview while closed.
+  - `CollapsibleGroup` is a test panel or a year of visits.
+  - `ShowMore` shows the latest 10 rows of a detail table first.
+  - `SectionNav` jumps to a section and opens it.
+
+  `lib/record/open-sections.ts` remembers the open sections in localStorage and hydrates with
+  the defaults.
+
   Routes come from `lib/record/href.ts`, and an unknown entry renders the record's `not-found`.
   A new kind of entry needs one endpoint and one page from these parts.
 - **The figure** carries every signal: heart rate and HRV beside the heart, SpO₂ and breathing

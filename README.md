@@ -511,6 +511,9 @@ The **Record** tab is the patient record. An overview holds:
 - recent visits;
 - the CGM summary with daily metrics.
 
+Each section opens and closes: closed, it shows a one-line preview whose chips link straight to
+entries. The browser remembers which sections are open.
+
 Every row opens a detail page:
 - every result of a test, charted (SBP and DBP together for blood pressure);
 - every episode of a diagnosis;

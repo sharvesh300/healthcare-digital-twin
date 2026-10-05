@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, History, Radio, Sparkles } from "lucide-react";
+import { FileText, Radio, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,7 +26,6 @@ export function PatientHeader({ patient }: { patient: PatientInfo }) {
   const name = patientName(patient, anonymous);
   const tabs = [
     { href: base, label: "Live", icon: Radio },
-    { href: `${base}/history`, label: "History", icon: History },
     { href: `${base}/record`, label: "Record", icon: FileText },
     { href: `${base}/predict`, label: "Predict", icon: Sparkles, soon: true },
   ];

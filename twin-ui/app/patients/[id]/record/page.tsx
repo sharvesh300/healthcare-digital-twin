@@ -1,126 +1,210 @@
-import { FlaskConical, Info, Pill, Stethoscope } from "lucide-react";
+import { CalendarDays, ClipboardList, Droplet, FlaskConical, History, Info, Pill, Stethoscope } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { Card, CardHeader } from "@/components/ui/card";
+import { DailyCgm } from "@/components/record/daily-cgm";
+import { FilterLinks } from "@/components/record/filters";
+import { Empty, FlagChip, SectionCard, StatTile, Synthetic } from "@/components/record/parts";
+import { ConditionRow, MeasureRow, MedicationRow, RowList, VisitRow } from "@/components/record/rows";
 import { api } from "@/lib/api/server";
-import type { TwinRecord } from "@/lib/api/types";
-import { cn } from "@/lib/cn";
-import { fmtDate, fmtNumber, titleCase } from "@/lib/twin/format";
+import type { MeasureSummary, RecordOverview } from "@/lib/api/types";
+import { fmtDay, resultValue, titleCaseStatus, visitClass } from "@/lib/record/format";
+import { recordHref } from "@/lib/record/href";
+import { fmtNumber } from "@/lib/twin/format";
 
 export const metadata: Metadata = { title: "Record" };
 
-const LABS: { key: string; label: string; unit: string; digits?: number; flag?: string }[] = [
-  { key: "hba1c", label: "HbA1c", unit: "%", digits: 1 },
-  { key: "fasting_glucose", label: "Fasting glucose", unit: "mg/dL" },
-  { key: "bmi", label: "BMI", unit: "kg/m²", digits: 1, flag: "bmi_is_synthetic" },
-  { key: "sbp", label: "Blood pressure", unit: "mmHg" },
-  { key: "ldl", label: "LDL", unit: "mg/dL", flag: "ldl_is_synthetic" },
-  { key: "hdl", label: "HDL", unit: "mg/dL" },
-  { key: "triglycerides", label: "Triglycerides", unit: "mg/dL" },
-  { key: "egfr", label: "eGFR", unit: "mL/min/1.73m²", flag: "egfr_is_synthetic" },
-  { key: "homa_ir", label: "HOMA-IR", unit: "", digits: 1, flag: "homa_ir_is_synthetic" },
-  { key: "creatinine", label: "Creatinine", unit: "mg/dL", digits: 2 },
-];
+const SECTIONS = [
+  ["medications", "Medications"],
+  ["conditions", "Conditions"],
+  ["tests", "Tests and vitals"],
+  ["visits", "Visits"],
+  ["glucose", "Glucose"],
+] as const;
 
-// ref.condition_group display names (seeds/reference/condition_group.csv)
-const CONDITION_LABEL: Record<string, string> = {
-  t2d: "Type 2 diabetes",
-  prediabetes: "Prediabetes",
-  hypertension: "Hypertension",
-  dyslipidemia: "Dyslipidaemia",
-  obesity: "Obesity",
-  metabolic_syndrome: "Metabolic syndrome",
-  ckd: "Chronic kidney disease",
-  retinopathy: "Diabetic retinopathy",
-  neuropathy: "Diabetic neuropathy",
-  cardiovascular: "Cardiovascular disease",
-  masld: "Fatty liver disease (MASLD)",
-  hypoglycemia: "Hypoglycaemia",
-  anemia: "Anaemia",
-  sleep_apnea: "Sleep apnoea",
-  copd: "COPD",
-};
+export default async function RecordPage({ params, searchParams }: PageProps<"/patients/[id]/record">) {
+  const { id } = await params;
+  const query = await searchParams;
+  const r = await api.record.overview(id);
+  const href = recordHref(id);
+  const outOfRange = query.tests === "out_of_range";
+  const panels = outOfRange
+    ? r.tests.panels
+        .map((p) => ({ ...p, measures: p.measures.filter((m) => m.latest.flag === "high" || m.latest.flag === "low") }))
+        .filter((p) => p.measures.length)
+    : r.tests.panels;
+  const { diagnoses, findings } = r.conditions;
 
-function Synthetic() {
-  return <span className="hatch rounded-chip border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-2">Synthetic</span>;
+  return (
+    <div className="space-y-5">
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-3">
+        <Info aria-hidden size={14} className="mt-px shrink-0 text-primary" />
+        {r.provenance.note}
+      </p>
+
+      <SummaryTiles r={r} href={href} />
+
+      <nav aria-label="Record sections"
+        className="z-10 -mx-1 flex gap-1.5 overflow-x-auto bg-canvas/85 px-1 py-1 backdrop-blur [scrollbar-width:none] lg:sticky lg:top-[133px]">
+        {SECTIONS.map(([key, label]) => (
+          <a key={key} href={`#${key}`}
+            className="whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-2 shadow-card transition-colors hover:border-line-strong hover:text-ink">
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <SectionCard id="medications" icon={<Pill aria-hidden size={14} className="text-ink-3" />} title="Medications"
+        meta={`${r.medications.active} active · ${r.medications.total} in the record`}
+        action={{ href: href.medications, label: "View all" }}>
+        {r.medications.items.length ? (
+          <RowList>{r.medications.items.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)}</RowList>
+        ) : (
+          <Empty>No medications in the record.</Empty>
+        )}
+        {r.medications.single_day > 0 && (
+          <Link href={`${href.medications}#single-day`} className="mt-2 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
+            <History aria-hidden size={12} /> {r.medications.single_day} more given during a visit only (anaesthesia, one-off doses)
+          </Link>
+        )}
+      </SectionCard>
+
+      <div id="conditions" className="grid scroll-mt-48 grid-cols-12 gap-5">
+        <SectionCard className="col-span-12 lg:col-span-7" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
+          title="Diagnoses" meta={`${diagnoses.active} active · ${diagnoses.total} in the record`}
+          action={{ href: `${href.conditions}?kind=diagnosis`, label: "View all" }}>
+          {diagnoses.items.length ? (
+            <RowList>{diagnoses.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
+          ) : (
+            <Empty>No diagnoses recorded.</Empty>
+          )}
+        </SectionCard>
+        <SectionCard className="col-span-12 lg:col-span-5" icon={<ClipboardList aria-hidden size={14} className="text-ink-3" />}
+          title="Social history and findings" meta={`${findings.total}`}
+          action={{ href: `${href.conditions}?kind=finding`, label: "View all" }}>
+          {findings.items.length ? (
+            <RowList>{findings.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
+          ) : (
+            <Empty>No findings recorded.</Empty>
+          )}
+        </SectionCard>
+      </div>
+
+      <SectionCard id="tests" icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals"
+        meta={`${r.tests.total} tests · ${r.tests.out_of_range} out of range`}
+        action={{ href: href.tests, label: "View all" }}
+        right={<FilterLinks label="Show" name="tests" path={href.overview} params={query}
+          options={[{ value: null, label: "All", count: r.tests.total }, { value: "out_of_range", label: "Out of range", count: r.tests.out_of_range }]} />}>
+        {panels.length ? (
+          <div className="space-y-4">
+            {panels.map((p) => (
+              <section key={p.panel} aria-label={p.display}>
+                <h3 className="label mb-1 flex items-center justify-between">
+                  {p.display}
+                  <Link href={`${href.tests}?panel=${p.panel}`} className="normal-case tracking-normal text-ink-3 hover:text-ink-2">
+                    {p.measures.length} test{p.measures.length === 1 ? "" : "s"}
+                  </Link>
+                </h3>
+                <RowList>{p.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <Empty>{outOfRange ? "Every latest result is within its reference range." : "No tests or vitals recorded."}</Empty>
+        )}
+        {Object.keys(r.derived).length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-xs">
+            <span className="label">Derived</span>
+            {Object.entries(r.derived).map(([k, d]) => (
+              <span key={k} className="inline-flex items-center gap-1.5 text-ink-2">
+                {d.display}
+                <span className="font-semibold tabular-nums text-ink">{fmtNumber(d.value, d.value < 10 ? 2 : 0)}</span>
+                {d.unit && <span className="text-ink-3">{d.unit}</span>}
+                {d.is_synthetic && <Synthetic />}
+              </span>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      <div className="grid grid-cols-12 gap-5">
+        <SectionCard id="visits" className="col-span-12 lg:col-span-5" icon={<CalendarDays aria-hidden size={14} className="text-ink-3" />}
+          title="Visits" meta={`${r.visits.total}`} action={{ href: href.visits, label: "View all" }}>
+          {r.visits.recent.length ? (
+            <RowList>{r.visits.recent.map((v) => <VisitRow key={v.encounter_id} v={v} href={href.visit(v.encounter_id)} />)}</RowList>
+          ) : (
+            <Empty>No visits recorded.</Empty>
+          )}
+        </SectionCard>
+        <SectionCard id="glucose" className="col-span-12 lg:col-span-7" icon={<Droplet aria-hidden size={14} className="text-vital-glucose" />}
+          title="Glucose (CGM)" meta="fused CGM, consensus ranges">
+          <Glucose id={id} cgm={r.cgm} />
+        </SectionCard>
+      </div>
+    </div>
+  );
 }
 
-export default async function RecordPage({ params }: PageProps<"/patients/[id]/record">) {
-  const { id } = await params;
-  const r: TwinRecord = await api.record(id);
-  const b = r.baseline ?? {};
-  const synthetic = new Set((b.synthetic_analytes as string[] | undefined) ?? []);
+function SummaryTiles({ r, href }: { r: RecordOverview; href: ReturnType<typeof recordHref> }) {
+  const v = r.summary.last_visit;
   return (
-    <div className="grid grid-cols-12 gap-5">
-      <Card className="col-span-12 flex items-start gap-3 p-5">
-        <Info size={16} className="mt-0.5 shrink-0 text-primary" />
-        <p className="text-sm leading-relaxed text-ink-2">{r.provenance.note}</p>
-      </Card>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <StatTile label="Medications" value={r.summary.medications_active} href={`${href.medications}?active=true`}
+        hint={r.summary.glucose_lowering_active ? `${r.summary.glucose_lowering_active} glucose-lowering` : "none glucose-lowering"}>
+        <span className="text-xs text-ink-3">active</span>
+      </StatTile>
+      <StatTile label="Diagnoses" value={r.summary.diagnoses_active} href={`${href.conditions}?kind=diagnosis&active=true`}
+        hint={`${r.conditions.diagnoses.total} in the record`}>
+        <span className="text-xs text-ink-3">active</span>
+      </StatTile>
+      {r.summary.headline.slice(0, 3).map((m) => <HeadlineTile key={m.measure} m={m} href={href.test(m.measure)} />)}
+      {v && (
+        <StatTile label="Last visit" value={<span className="text-base">{fmtDay(v.start)}</span>} href={href.visit(v.encounter_id)}
+          hint={v.type ?? visitClass(v.class)} />
+      )}
+    </div>
+  );
+}
 
-      <Card className="col-span-12 p-5">
-        <CardHeader icon={<FlaskConical size={14} className="text-ink-3" />} title="Baseline"
-          meta={b.effective_at ? `as of ${fmtDate(String(b.effective_at))}` : undefined} />
-        <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
-          {LABS.map(({ key, label, unit, digits, flag }) => {
-            const v = b[key];
-            const isSyn = (flag && b[flag] === true) || synthetic.has(key);
-            const value = key === "sbp" && b.sbp != null ? `${fmtNumber(b.sbp as number)}/${fmtNumber(b.dbp as number)}` : fmtNumber(v as number, digits ?? 0);
-            return (
-              <div key={key} className={cn("bg-surface p-4", isSyn && "hatch")}>
-                <dt className="label flex items-center justify-between gap-2">{label}{isSyn && <Synthetic />}</dt>
-                <dd className="mt-2 text-xl font-semibold tabular-nums text-ink">
-                  {v == null ? <span className="text-ink-3">—</span> : value}
-                  {v != null && unit && <span className="ml-1 text-xs font-normal text-ink-3">{unit}</span>}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </Card>
+function HeadlineTile({ m, href }: { m: MeasureSummary; href: string }) {
+  return (
+    <StatTile label={m.display} value={resultValue(m, m.latest)} unit={m.unit} href={href} synthetic={m.latest.is_synthetic}
+      hint={fmtDay(m.latest.at)}>
+      <FlagChip flag={m.latest.flag} />
+    </StatTile>
+  );
+}
 
-      <Card className="col-span-12 p-5 lg:col-span-5">
-        <CardHeader icon={<Stethoscope size={14} className="text-ink-3" />} title="Conditions" meta={`${r.conditions.length} groups`} />
-        <ul className="mt-3 divide-y divide-line">
-          {r.conditions.map((c) => (
-            <li key={c.condition_group} className="flex items-start justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">{CONDITION_LABEL[c.condition_group] ?? titleCase(c.condition_group)}</p>
-                <p className="mt-0.5 truncate text-xs text-ink-3" title={c.conditions.join(", ")}>{c.conditions.join(", ")}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                {c.all_synthetic && <Synthetic />}
-                <span className={cn("rounded-chip px-1.5 py-0.5 text-[11px] font-medium", c.active ? "bg-primary-soft text-primary-strong" : "bg-surface-2 text-ink-3")}>
-                  {c.active ? "Active" : "Resolved"}
-                </span>
-              </div>
-            </li>
-          ))}
-          {!r.conditions.length && <li className="py-6 text-center text-sm text-ink-3">No conditions recorded</li>}
-        </ul>
-      </Card>
+function Glucose({ id, cgm }: { id: string; cgm: RecordOverview["cgm"] }) {
+  if (!cgm?.window) return <Empty>No CGM recording for this patient.</Empty>;
+  const w = cgm.window;
+  const c = cgm.consistency;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Fact label="Recording" value={`${fmtDay(w.period_start)} – ${fmtDay(w.period_end)}`} small />
+        <Fact label="Mean" value={fmtNumber(w.mean_mg_dl)} unit="mg/dL" />
+        <Fact label="GMI" value={fmtNumber(w.gmi, 1)} unit="%" />
+        <Fact label="HbA1c vs GMI" value={c ? titleCaseStatus(c.status) : "—"} small
+          hint={c?.hba1c != null && c.abs_diff != null ? `HbA1c ${fmtNumber(c.hba1c, 1)} % · gap ${fmtNumber(c.abs_diff, 1)}` : undefined} />
+      </div>
+      <DailyCgm daily={cgm.daily} />
+      <Link href={`/patients/${id}?at=${encodeURIComponent(w.period_end)}`}
+        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <History aria-hidden size={13} /> Replay these days in the live twin
+      </Link>
+    </div>
+  );
+}
 
-      <Card className="col-span-12 p-5 lg:col-span-7">
-        <CardHeader icon={<Pill size={14} className="text-ink-3" />} title="Medications" meta={`${r.medications.filter((m) => m.active).length} active`} />
-        <ul className="mt-3 divide-y divide-line">
-          {r.medications.slice(0, 14).map((m, i) => (
-            <li key={`${m.medication}-${i}`} className="flex items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium capitalize text-ink">{m.medication}</p>
-                <p className="mt-0.5 text-xs text-ink-3">
-                  {m.drug_class ? titleCase(m.drug_class) : "Unclassified"}
-                  {m.dose_value != null && ` · ${fmtNumber(m.dose_value, 0)} ${m.dose_unit ?? ""}`} · since {fmtDate(m.started_at)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                {m.glucose_lowering && <span className="rounded-chip bg-[color-mix(in_srgb,var(--vital-glucose)_11%,white)] px-1.5 py-0.5 text-[11px] font-medium text-ink">Glucose-lowering</span>}
-                {m.is_synthetic && <Synthetic />}
-                {!m.active && <span className="rounded-chip bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-3">Stopped</span>}
-              </div>
-            </li>
-          ))}
-          {!r.medications.length && <li className="py-6 text-center text-sm text-ink-3">No medications recorded</li>}
-        </ul>
-      </Card>
+function Fact({ label, value, unit, hint, small }: { label: string; value: string; unit?: string; hint?: string; small?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-control bg-surface-2 px-3 py-2.5">
+      <div className="label">{label}</div>
+      <div className={small ? "mt-1 text-sm font-medium text-ink" : "mt-1 text-lg font-semibold tabular-nums text-ink"}>
+        {value}{unit && <span className="ml-1 text-xs font-normal text-ink-3">{unit}</span>}
+      </div>
+      {hint && <div className="mt-0.5 truncate text-[11px] text-ink-3">{hint}</div>}
     </div>
   );
 }

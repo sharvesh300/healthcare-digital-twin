@@ -180,10 +180,205 @@ export interface TwinRecord {
   };
 }
 
-export interface Timeline {
-  patient_id: string;
-  start?: string;
-  end?: string;
-  series: Record<string, number | string | boolean | null>[];
-  note?: string;
+
+// ── /patients/{id}/record: the patient record (src/twin/record/assemble.py) ──
+
+export type Flag = "high" | "low" | "normal";
+export type Range = [number | null, number | null];
+
+export interface Provenance {
+  source: string;
+  is_synthetic: boolean;
+}
+
+export interface VisitBrief {
+  encounter_id: string;
+  class: string;
+  type: string | null;
+  start: string;
+}
+
+export interface VisitSummary extends VisitBrief, Provenance {
+  reason: string | null;
+  end: string | null;
+  duration_h: number | null;
+  counts: { tests: number; diagnoses: number; medications: number };
+}
+
+export interface Dosage {
+  dose_value: number | null;
+  dose_unit: string | null;
+  times_per_day: number | null;
+  as_needed: boolean;
+  /** "5 mg · once daily"; null when the source recorded neither dose nor frequency */
+  text: string | null;
+}
+
+export interface MedicationSummary extends Provenance {
+  rxcui: number;
+  medication: string;
+  product: string | null;
+  drug_class: string | null;
+  drug_class_display: string | null;
+  glucose_lowering: boolean;
+  active: boolean;
+  dosage: Dosage;
+  started_at: string;
+  ended_at: string | null;
+  first_started_at: string;
+  episodes: number;
+  /** given during one visit only (an anaesthetic, a one-off injection) */
+  single_day: boolean;
+  encounter_id: string | null;
+}
+
+export interface ConditionSummary extends Provenance {
+  concept_id: number;
+  system: string;
+  code: string;
+  display: string;
+  kind: "diagnosis" | "finding";
+  group: string | null;
+  group_display: string | null;
+  active: boolean;
+  episodes: number;
+  first_onset: string;
+  current: { onset_at: string; abated_at: string | null; active: boolean };
+  last_change: string;
+}
+
+export interface ResultBrief extends Provenance {
+  at: string;
+  /** numeric components by analyte ({ sbp, dbp } for blood pressure) */
+  values: Record<string, number>;
+  /** a coded answer ("Never smoked") */
+  text: string | null;
+  flag: Flag | null;
+  encounter_id: string | null;
+}
+
+export interface MeasureSummary {
+  measure: string;
+  display: string;
+  panel: string;
+  panel_display: string;
+  unit: string | null;
+  digits: number;
+  analytes: string[];
+  ranges: Record<string, Range | null>;
+  count: number;
+  out_of_range: number;
+  latest: ResultBrief;
+  previous: ResultBrief | null;
+  spark: [string, number][];
+  is_synthetic: boolean;
+}
+
+export interface Panel {
+  panel: string;
+  display: string;
+  measures: MeasureSummary[];
+}
+
+export interface Derived {
+  value: number;
+  is_synthetic: boolean;
+  display: string;
+  unit: string | null;
+}
+
+export interface RecordSection<T> {
+  total: number;
+  active: number;
+  items: T[];
+}
+
+export interface RecordOverview {
+  patient: PatientInfo & { birth_date: string; mrn: string | null; race_ethnicity: string | null; address_city: string | null; address_state: string | null };
+  provenance: { cohort: string; composite: boolean; note: string };
+  summary: {
+    medications_active: number;
+    glucose_lowering_active: number;
+    diagnoses_active: number;
+    last_visit: VisitSummary | null;
+    headline: MeasureSummary[];
+  };
+  medications: RecordSection<MedicationSummary> & { single_day: number };
+  conditions: { diagnoses: RecordSection<ConditionSummary>; findings: RecordSection<ConditionSummary> };
+  tests: { total: number; out_of_range: number; panels: Panel[] };
+  visits: { total: number; recent: VisitSummary[] };
+  derived: Record<string, Derived>;
+  cgm: TwinRecord["cgm"] | null;
+}
+
+export interface TestsList {
+  total: number;
+  panels: Panel[];
+}
+
+export interface MeasureDetail {
+  measure: MeasureSummary;
+  stats: {
+    count: number;
+    first_at: string;
+    latest_at: string;
+    out_of_range: number;
+    by_analyte: Record<string, { min: number; max: number; mean: number }>;
+  };
+  results: (ResultBrief & { visit: VisitBrief | null })[];
+  related: { panel: MeasureSummary[]; medications: MedicationSummary[]; diagnoses: ConditionSummary[] };
+}
+
+export type ConditionsList = RecordSection<ConditionSummary>;
+
+export interface ConditionDetail {
+  condition: ConditionSummary;
+  episodes: (Provenance & { onset_at: string; abated_at: string | null; active: boolean; duration_days: number | null; visit: VisitBrief | null })[];
+  related: { medications: MedicationSummary[]; measures: MeasureSummary[] };
+}
+
+export interface MedicationsList extends RecordSection<MedicationSummary> {
+  single_day: MedicationSummary[];
+}
+
+export interface MedicationDetail {
+  medication: MedicationSummary;
+  episodes: (Provenance & {
+    regimen_id: number;
+    product: string | null;
+    product_rxcui: string | null;
+    dosage: Dosage;
+    started_at: string;
+    ended_at: string | null;
+    active: boolean;
+    single_day: boolean;
+    visit: VisitBrief | null;
+  })[];
+  dose_changes: { at: string; from: string; to: string }[];
+  related: { diagnoses: ConditionSummary[]; measures: MeasureSummary[] };
+}
+
+export interface VisitsPage {
+  total: number;
+  items: VisitSummary[];
+  next_cursor: string | null;
+  years: { year: number; count: number }[];
+  classes: { class: string; count: number }[];
+}
+
+export interface VisitTest extends ResultBrief {
+  measure: string;
+  display: string;
+  panel: string;
+  unit: string | null;
+  digits: number;
+}
+
+export interface VisitDetail {
+  visit: VisitSummary;
+  tests: { panel: string; display: string; items: VisitTest[] }[];
+  diagnoses: { recorded: ConditionSummary[]; resolved: ConditionSummary[] };
+  medications: { started: MedicationSummary[]; stopped: MedicationSummary[] };
+  previous: VisitSummary | null;
+  next: VisitSummary | null;
 }

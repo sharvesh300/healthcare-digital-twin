@@ -6,6 +6,10 @@ import type { NextConfig } from "next";
 const TWIN_API_URL = process.env.TWIN_API_URL ?? "http://127.0.0.1:8765";
 
 const nextConfig: NextConfig = {
+  // History merged into Record (the recorded sensor days replay on the Live tab).
+  async redirects() {
+    return [{ source: "/patients/:id/history", destination: "/patients/:id/record", permanent: false }];
+  },
   async rewrites() {
     return [{ source: "/api/twin/:path*", destination: `${TWIN_API_URL}/:path*` }];
   },

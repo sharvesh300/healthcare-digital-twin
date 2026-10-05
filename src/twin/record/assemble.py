@@ -54,6 +54,11 @@ def _window(v: dict) -> tuple[datetime, datetime]:
     return v["started_at"], max(end, v["started_at"] + timedelta(minutes=1))
 
 
+def has_records(v: dict) -> bool:
+    """Whether anything (a test, a diagnosis, a medication) was recorded at a visit summary."""
+    return any(v["counts"].values())
+
+
 def visit_summaries(data: RecordData) -> list[dict]:
     """Every visit, newest first, with what was recorded at it."""
     tests: dict[str, set[str]] = defaultdict(set)
@@ -76,6 +81,7 @@ def visit_summaries(data: RecordData) -> list[dict]:
                     "duration_h": round(hours, 1) if hours is not None else None,
                     "counts": {"tests": len(tests[eid]), "diagnoses": diagnoses[eid], "medications": medications[eid]},
                     "source": v["source"], "is_synthetic": v["is_synthetic"]})
+        out[-1]["has_records"] = has_records(out[-1])
     return _newest_first(out, "start")
 
 
@@ -87,11 +93,15 @@ def visits_page(data: RecordData, year: int | None = None, cls: str | None = Non
     items = [v for v in every if (year is None or v["start"].year == year) and (cls is None or v["class"] == cls)]
     offset = int(cursor) if cursor and cursor.isdigit() else 0
     page = items[offset:offset + limit]
+    # each facet counts what choosing it would show alongside the other filter, so a client
+    # can disable a choice that leads to an empty list
     years = defaultdict(int)
     classes = defaultdict(int)
     for v in every:
-        years[v["start"].year] += 1
-        classes[v["class"]] += 1
+        if cls is None or v["class"] == cls:
+            years[v["start"].year] += 1
+        if year is None or v["start"].year == year:
+            classes[v["class"]] += 1
     return {"total": len(items), "items": page,
             "next_cursor": str(offset + limit) if offset + limit < len(items) else None,
             "years": [{"year": y, "count": n} for y, n in sorted(years.items(), reverse=True)],
@@ -378,9 +388,10 @@ def visit_detail(data: RecordData, encounter_id: str) -> dict | None:
             "stopped": medication_summaries([m for m in data.medications if m["encounter_id"] != encounter_id
                                              and m["ended_at"] and start <= m["ended_at"] <= end]),
         },
-        # summaries are newest first: the previous visit is the next one in the list
-        "previous": summaries[index + 1] if index + 1 < len(summaries) else None,
-        "next": summaries[index - 1] if index > 0 else None,
+        # the neighbouring visits that have something recorded (summaries are newest first);
+        # visits with nothing recorded are skipped, so stepping never lands on an empty page
+        "previous": next((v for v in summaries[index + 1:] if v["has_records"]), None),
+        "next": next((v for v in reversed(summaries[:index]) if v["has_records"]), None),
     }
 
 
@@ -439,7 +450,7 @@ def overview(data: RecordData) -> dict[str, Any]:
                        for k, v in (("diagnoses", by_kind["diagnosis"]), ("findings", by_kind["finding"]))},
         "tests": {"total": len(measures), "out_of_range": sum(s["latest"]["flag"] in OUT_OF_RANGE for s in measures.values()),
                   "panels": panels(list(measures.values()))},
-        "visits": {"total": len(visits), "recent": visits[:8]},
+        "visits": {"total": len(visits), "with_records": sum(v["has_records"] for v in visits), "recent": visits[:8]},
         "derived": _derived(data.baseline),
         "cgm": data.cgm,
     }

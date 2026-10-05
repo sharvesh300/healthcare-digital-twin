@@ -76,8 +76,10 @@ def record() -> RecordData:
 
 
 class FakeRecordStore:
+    override: RecordData | None = None
+
     async def load(self, patient_id, sections=None):
-        return record() if patient_id == PID else None
+        return (self.override or record()) if patient_id == PID else None
 
 
 @pytest.fixture
@@ -174,6 +176,22 @@ def test_visit_links_everything_recorded_at_it(client):
     assert inpatient["visit"]["duration_h"] == 48 and [c["display"] for c in inpatient["diagnoses"]["resolved"]] == []
 
 
+def test_stepping_between_visits_skips_visits_with_nothing_recorded(client):
+    data = record()
+    empty = "00000000-0000-0000-0000-0000000000e0"
+    data.visits.append(visit(empty, t(2023, 1, 1)))  # between V2 (2022) and V3 (2024), nothing recorded
+    FakeRecordStore.override = data
+    try:
+        v3 = get(client, f"/visits/{V3}")
+        assert v3["previous"]["encounter_id"] == V2  # not the empty 2023 visit
+        hollow = get(client, f"/visits/{empty}")
+        assert hollow["visit"]["has_records"] is False
+        assert (hollow["previous"]["encounter_id"], hollow["next"]["encounter_id"]) == (V2, V3)
+        assert get(client)["visits"]["with_records"] == 3
+    finally:
+        FakeRecordStore.override = None
+
+
 def test_visits_page_with_a_cursor_and_filters(client):
     first = get(client, "/visits?limit=2")
     assert [v["encounter_id"] for v in first["items"]] == [V3, V2] and first["total"] == 3
@@ -181,6 +199,9 @@ def test_visits_page_with_a_cursor_and_filters(client):
     assert [v["encounter_id"] for v in rest["items"]] == [V1] and rest["next_cursor"] is None
     assert get(client, "/visits?class=inpatient")["total"] == 1 and get(client, "/visits?year=2020")["total"] == 1
     assert first["years"][0] == {"year": 2024, "count": 1}
+    inpatient = get(client, "/visits?class=inpatient")
+    assert inpatient["years"] == [{"year": 2022, "count": 1}]  # years that have an inpatient stay
+    assert get(client, "/visits?year=2024")["classes"] == [{"class": "ambulatory", "count": 1}]
 
 
 def test_dosage_reads_naturally():

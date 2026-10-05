@@ -10,8 +10,11 @@ export const metadata: Metadata = { title: "Live twin" };
 const toPoints = (r: Readings, metric: string): Point[] =>
   (r.series[metric] ?? []).map(([t, v]) => ({ t: Date.parse(t), v }));
 
-export default async function LiveTwinPage({ params }: PageProps<"/patients/[id]">) {
+export default async function LiveTwinPage({ params, searchParams }: PageProps<"/patients/[id]">) {
   const { id } = await params;
+  // ?at=<iso> opens the replay paused at that moment (links from History and shared moments)
+  const at = (await searchParams).at;
+  const initialAt = typeof at === "string" && Number.isFinite(Date.parse(at)) ? Date.parse(at) : null;
   const { patient, state } = await api.patient(id);
   // Charts end at the twin's latest reading (a fast replay's device clock runs ahead of now).
   const anchor = [state.glucose.time, state.heart_rate.time].filter(Boolean).sort().at(-1) ?? null;
@@ -23,6 +26,7 @@ export default async function LiveTwinPage({ params }: PageProps<"/patients/[id]
     <LiveTwin
       patientId={id}
       recording={patient.window ?? null}
+      initialAt={initialAt}
       init={{
         state,
         transitions,

@@ -17,8 +17,6 @@ export interface ReplayWindow {
   end: number;
 }
 
-/** Latest moment a replay can reach: the end of the recording, or now if it runs past now. */
-export const replayLimit = (w: ReplayWindow) => Math.min(w.end, Date.now());
 
 function lastNight(limit: number, earliest: number): ReplayWindow {
   const day = toZonedInput(limit).slice(0, 10);
@@ -27,9 +25,10 @@ function lastNight(limit: number, earliest: number): ReplayWindow {
   return { start: Math.max(earliest, end - 9 * HOUR), end };
 }
 
-/** Pick the window, then play: presets, From/To in clinic time, play/pause, scrubber, speed. */
-export function ReplayBar({ recording, window: win, speed, progress, ready, send, onWindow, onSpeed }: {
-  recording: ReplayWindow;
+/** Pick the window, then play: presets, From/To in clinic time, play/pause, scrubber, speed.
+ *  `extent` is what can be replayed: the recording and the streamed readings. */
+export function ReplayBar({ extent, window: win, speed, progress, ready, send, onWindow, onSpeed, marker }: {
+  extent: ReplayWindow;
   window: ReplayWindow;
   speed: number;
   progress: ReplayProgress | null;
@@ -37,25 +36,27 @@ export function ReplayBar({ recording, window: win, speed, progress, ready, send
   send: (c: ReplayCommand) => void;
   onWindow: (w: ReplayWindow) => void;
   onSpeed: (s: number) => void;
+  /** the moment being inspected, ticked on the scrubber */
+  marker?: number | null;
 }) {
   const [drag, setDrag] = useState<number | null>(null);
-  const limit = replayLimit(recording);
+  const limit = extent.end;
   const playing = progress?.status === "playing";
   const ended = progress?.status === "ended";
   const cursor = drag ?? (progress ? Date.parse(progress.cursor) : win.start);
   const pct = ((cursor - win.start) / (win.end - win.start)) * 100;
 
   const presets: { label: string; w: () => ReplayWindow }[] = [
-    { label: "Last 3 h", w: () => ({ start: Math.max(recording.start, limit - 3 * HOUR), end: limit }) },
-    { label: "Last 6 h", w: () => ({ start: Math.max(recording.start, limit - 6 * HOUR), end: limit }) },
-    { label: "Last 24 h", w: () => ({ start: Math.max(recording.start, limit - 24 * HOUR), end: limit }) },
-    { label: "Last night", w: () => lastNight(limit, recording.start) },
+    { label: "Last 3 h", w: () => ({ start: Math.max(extent.start, limit - 3 * HOUR), end: limit }) },
+    { label: "Last 6 h", w: () => ({ start: Math.max(extent.start, limit - 6 * HOUR), end: limit }) },
+    { label: "Last 24 h", w: () => ({ start: Math.max(extent.start, limit - 24 * HOUR), end: limit }) },
+    { label: "Last night", w: () => lastNight(limit, extent.start) },
   ];
   const isPreset = (w: ReplayWindow) => Math.abs(w.start - win.start) < 60_000 && Math.abs(w.end - win.end) < 60_000;
 
   const setFrom = (value: string) => {
     const t = fromZonedInput(value);
-    if (t != null && t < win.end) onWindow({ start: Math.max(recording.start, t), end: win.end });
+    if (t != null && t < win.end) onWindow({ start: Math.max(extent.start, t), end: win.end });
   };
   const setTo = (value: string) => {
     const t = fromZonedInput(value);
@@ -92,7 +93,7 @@ export function ReplayBar({ recording, window: win, speed, progress, ready, send
           <CalendarClock size={14} aria-hidden />
           <label className="flex items-center gap-1.5">
             From
-            <input type="datetime-local" value={toZonedInput(win.start)} min={toZonedInput(recording.start)} max={toZonedInput(win.end)}
+            <input type="datetime-local" value={toZonedInput(win.start)} min={toZonedInput(extent.start)} max={toZonedInput(win.end)}
               onChange={(e) => setFrom(e.target.value)}
               className="h-8 rounded-control border border-line bg-surface px-2 font-mono text-xs text-ink tabular-nums focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15" />
           </label>
@@ -128,6 +129,11 @@ export function ReplayBar({ recording, window: win, speed, progress, ready, send
             <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-surface-2" />
             <div className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary transition-[width] duration-200 ease-linear"
               style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+            {marker != null && marker >= win.start && marker <= win.end && (
+              <span aria-hidden title={`Inspected moment ${fmtTime(marker)}`}
+                className="absolute top-1/2 h-4 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-status-warn ring-2 ring-surface"
+                style={{ left: `${((marker - win.start) / (win.end - win.start)) * 100}%` }} />
+            )}
             <input
               type="range"
               aria-label="Replay position"
@@ -162,8 +168,8 @@ export function ReplayBar({ recording, window: win, speed, progress, ready, send
         </div>
       </div>
       <p className="mt-3 text-[11px] text-ink-3">
-        {speed}× plays {fmtSpan(speed * 60_000)} of the recording per minute · the whole window takes {fmtSpan((win.end - win.start) / speed)}.
-        The replay uses the recorded data and the twin&apos;s live rules; streamed readings are not included.
+        {speed}× plays {fmtSpan(speed * 60_000)} of the twin per minute · the whole window takes {fmtSpan((win.end - win.start) / speed)}.
+        The replay runs the recorded and streamed readings through the twin&apos;s live rules.
       </p>
     </motion.section>
   );

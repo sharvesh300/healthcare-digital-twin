@@ -358,7 +358,7 @@ def visit_detail(data: RecordData, encounter_id: str) -> dict | None:
         for r in results:
             if r["encounter_id"] == encounter_id:
                 tests.append({"measure": m.key, "display": m.display, "panel": m.panel, "unit": m.unit or r["unit"],
-                              "digits": m.digits, **_brief(r)})
+                              "digits": m.digits, "analytes": list(m.analytes), **_brief(r)})
     by_panel = defaultdict(list)
     for t in tests:
         by_panel[t["panel"]].append(t)

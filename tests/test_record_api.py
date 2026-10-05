@@ -162,6 +162,8 @@ def test_medication_episodes_and_dose_changes(client):
 def test_visit_links_everything_recorded_at_it(client):
     v = get(client, f"/visits/{V3}")
     assert v["visit"]["counts"] == {"tests": 3, "diagnoses": 2, "medications": 2}
+    bp = next(i for p in v["tests"] for i in p["items"] if i["measure"] == "blood_pressure")
+    assert bp["analytes"] == ["sbp", "dbp"]  # the order to read them in
     assert [(p["panel"], [i["measure"] for i in p["items"]]) for p in v["tests"]] == [
         ("glycaemic", ["hba1c"]), ("vitals", ["blood_pressure"]), ("lifestyle", ["smoking_status"])]
     assert {c["display"] for c in v["diagnoses"]["recorded"]} == {"Acute bronchitis", "Hypertension"}

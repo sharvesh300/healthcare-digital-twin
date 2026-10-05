@@ -53,15 +53,27 @@ The API accepts WebSocket connections only from the origins in `ALLOWED_ORIGINS`
   - From / To date-time pickers in the clinic time zone;
   - play / pause, a scrubber, and 30–600× speed.
 
-  The hook then connects to `WS /ws/patients/{id}/state/replay`. The server replays the recorded
-  data through the twin's own state rules and sends the same snapshot and delta messages as the
-  live stream, plus `replay` progress messages. Ages are measured on the replay clock.
+  The hook then connects to `WS /ws/patients/{id}/state/replay` (with `live=true`, so the
+  simulator's streamed readings replay too). The server folds the readings through the twin's
+  own state rules and sends the same snapshot and delta messages as the live stream, plus
+  `replay` progress messages. Ages are measured on the replay clock.
+- **Inspecting a moment.** Clicking a chart point pins it: a popover shows the value, the other
+  vital then and the status changes around it, with a button that opens the replay paused at
+  that moment (`at=`), so the figure, cards and feed show the whole twin as it was. A
+  "What changed" event (filter **All / Alerts**) does the same in one click. Out-of-range runs
+  are shaded on the charts. The moment is kept in the URL (`/patients/{id}?at=<iso>`), and the
+  History charts link there too.
+- **The figure** carries every signal: heart rate and HRV beside the heart, SpO₂ and breathing
+  at the lungs, the CGM on the arm, steps or energy on the watch, a stress halo around the head
+  (score 0–99: rest, low, medium, high), and a wristband with skin temperature and EDA (its
+  sparks quicken with skin conductance). An out-of-range callout gets a band or warning ring.
 - **The figure** (`components/twin/twin-figure.tsx`) is SVG with CSS keyframes. Each loop's
   duration comes from a custom property set from the state:
   - `--beat` is 60 / heart rate.
   - `--breath` is 60 / respiration rate.
   - `--stride` follows the activity level.
   - `--aura` is the glucose band colour.
+  - `--stress` is the halo's pulse period; `--eda` sets the wristband sparks.
 
   `motion` handles the one-off transitions: posture, the sleep scene, and the ripples when a band
   changes. `prefers-reduced-motion` stops every loop.

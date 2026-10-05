@@ -509,9 +509,14 @@ reserved for the forecast and what-if modules.
 
 On the Live tab, **Replay** switches the same view to a recorded window. Pick a preset or a
 From / To time, press play, then scrub or change the speed (30–600×).
-`WS /ws/patients/{id}/state/replay?start=&end=&speed=` folds the recorded twin (fused CGM,
-wearables, sleep) through the same state rules as the live twin. It answers in the live
+`WS /ws/patients/{id}/state/replay?start=&end=&speed=&at=&live=` folds the recorded twin (fused
+CGM, wearables, sleep) through the same state rules as the live twin; `live=true` adds the
+simulator's streamed readings and `at` opens the session at a moment. It answers in the live
 protocol, so every component is reused, and it takes play, pause, seek and speed commands.
+
+Click any chart point, or any "What changed" event, to inspect that moment: the replay opens
+paused there and shows the whole twin as it was (figure, vitals, activity, sleep), ready to
+play on. The URL (`/patients/{id}?at=<iso>`) links straight to it; the History charts use it.
 
 The dashboard uses `GET /patients/{id}/readings` (chart points: live readings plus the recorded
 history before them) and the `live` summary in `GET /patients`. The WebSocket accepts browser

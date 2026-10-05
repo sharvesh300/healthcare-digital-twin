@@ -497,3 +497,25 @@ glucose card, vital cards, charts and feed. Only the clock and the data source c
   - "Live now" returning to the live twin;
   - the 375 px layout.
 
+### Moment inspection and the full-signal figure (added 2026-10-05)
+
+- **Figure.** HRV joins the heart callout; stress gets a halo around the head (hidden at rest and
+  while asleep); a wristband on the other arm carries skin temperature and EDA callouts, with
+  sparks timed by EDA; METs join the posture caption. Out-of-range callouts (heart rate, SpO₂,
+  glucose, high stress) get a ring in the band or warning colour, and every callout's tooltip
+  gives its status and age.
+- **Charts.** `SeriesSpec.flag` shades out-of-range runs (glucose bands; heart rate below 50 or
+  above 100). `ChartCard`'s `inspect` pins a clicked point in a popover: the value, the other
+  vital then, nearby transitions, and an action. The table view gets an Inspect button per row.
+- **Feed.** Events are buttons; an **All / Alerts** filter keeps the out-of-range ones
+  (`isAbnormal` in `lib/twin/format.ts`).
+- **Opening a moment.** `LiveTwin.inspect(t)` seeks if the open replay covers `t`, else opens a
+  replay from an hour before to two hours after, paused at `t` (`at=`). A banner names the
+  moment and offers "Back to {time}" and "Back to live"; the scrubber marks it; `?at=` keeps it
+  in the URL (History links there).
+- **Server.** The replay socket takes `at` (open there instead of at `start`) and `live`
+  (`SqlStateLoader.recorded(..., live=True)` adds the simulator's readings, each recording cut
+  at its first streamed reading, as the chart series are). The dashboard always asks for
+  `live=true`, and the replayable extent runs from the recording's start to the newest reading
+  seen live, since streamed moments lie past the recording.
+

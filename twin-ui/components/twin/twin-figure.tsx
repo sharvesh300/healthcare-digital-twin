@@ -1,13 +1,13 @@
 "use client";
 
-import { Footprints, HeartPulse, Moon, Watch, Wind } from "lucide-react";
+import { Brain, Footprints, HeartPulse, Moon, Thermometer, Watch, Wind, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { TwinState } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fmtAge, fmtNumber, fmtTime, isAsleep, statusLabel, TREND_LABEL } from "@/lib/twin/format";
-import { band, isBand, vital } from "@/lib/tokens";
+import { band, isBand, tone, vital } from "@/lib/tokens";
 
 // Stage: 420 × 440 view box. The figure is drawn in its own 240 × 420 space, centred at x = 120,
 // and placed at (90, 10). Limbs are drawn from their joint (shoulder / hip) so a CSS rotation
@@ -18,6 +18,17 @@ const at = (x: number, y: number): CSSProperties => ({ left: `${(x / VB_W) * 100
 
 const SPO2_FILL: Record<string, number> = { normal: 0.28, borderline: 0.17, low: 0.1 };
 const STRIDE: Record<string, string> = { moderate: "1.15s", vigorous: "0.75s" };
+
+/** Stress score (0–99) in the wearables' usual levels. */
+export function stressLevel(v: number | null): "rest" | "low" | "medium" | "high" | null {
+  if (v == null) return null;
+  return v <= 25 ? "rest" : v <= 50 ? "low" : v <= 75 ? "medium" : "high";
+}
+const STRESS_HALO: Record<string, { color: string; opacity: number; period: string }> = {
+  low: { color: "var(--ink-3)", opacity: 0.35, period: "3.2s" },
+  medium: { color: "var(--status-warn)", opacity: 0.55, period: "2s" },
+  high: { color: "var(--status-warn)", opacity: 0.9, period: "1.1s" },
+};
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -40,12 +51,27 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
   const aura = isBand(gBand) ? band[gBand] : "rgb(102 117 111 / 0.35)";
   const spo2Fill = SPO2_FILL[state.spo2.status ?? "normal"] ?? 0.2;
   const live = state.streaming;
+  const hrv = num(state.hrv_rmssd.value);
+  const stress = num(state.stress.value);
+  const stressLvl = stressLevel(stress);
+  const halo = !asleep && state.stress.status !== "stale" && stressLvl ? STRESS_HALO[stressLvl] : undefined;
+  const temp = num(state.skin_temp.value);
+  const eda = num(state.eda.value);
+  const wristband = temp != null || eda != null;
+  const met = state.activity.unit === "{MET}" ? num(state.activity.value) : null;
+  const age = (t: string | null) => (now ? fmtAge(t, now) : "");
+  const hrAlert = hrFresh && state.heart_rate.status !== "normal" && state.heart_rate.status != null;
+  const spo2Alert = state.spo2.status === "borderline" || state.spo2.status === "low";
+  const gAlert = gBand === "very_low" || gBand === "low" || gBand === "high" || gBand === "very_high";
 
   const vars = {
     "--beat": `${hr ? 60 / clamp(hr, 30, 200) : 1}s`,
     "--breath": `${rr ? 60 / clamp(rr, 6, 40) : 4}s`,
     "--stride": STRIDE[level] ?? "1.2s",
     "--aura": aura,
+    "--stress": halo?.period ?? "3s",
+    // electrodermal activity: more frequent sparks as skin conductance rises (log scale)
+    "--eda": `${eda != null ? clamp(2.6 - Math.log10(eda + 0.1) * 1.2, 0.6, 4) : 3}s`,
   } as CSSProperties;
 
   const summary = [
@@ -53,6 +79,10 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
     state.glucose.value != null &&
       `Glucose ${fmtNumber(state.glucose.value as number)}, ${statusLabel(gBand)}${state.glucose.trend ? `, ${TREND_LABEL[state.glucose.trend].toLowerCase()}` : ""}`,
     asleep ? `Asleep, ${statusLabel(state.sleep.status)} sleep` : `Activity ${statusLabel(state.activity.status)}`,
+    hrv != null && `HRV ${fmtNumber(hrv)} ms`,
+    stress != null && `Stress ${fmtNumber(stress)}, ${stressLvl}`,
+    temp != null && `Skin temperature ${fmtNumber(temp, 1)} °C`,
+    eda != null && `EDA ${fmtNumber(eda, 2)} µS`,
   ].filter(Boolean).join(". ");
 
   return (
@@ -122,6 +152,19 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
               </Limb>
               <Limb origin={[84, 106]} d="M0 0 L-11 62 L-17 116" width={18} className={walking ? "twin-swing" : undefined}>
                 <circle cx={-18} cy={124} r={8.5} fill="url(#twin-skin)" stroke="var(--line-strong)" strokeWidth={1.5} />
+                {/* research wristband (skin temperature, EDA): sparks quicken with skin conductance */}
+                {wristband && (
+                  <g>
+                    <rect x={-27} y={100} width={18} height={11} rx={4} fill="var(--ink-2)" />
+                    <rect x={-24} y={102.5} width={12} height={6} rx={2} fill="#fff" opacity={0.8} />
+                    {eda != null && state.eda.status !== "stale" && (
+                      <g className="twin-spark" stroke="var(--status-warn)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" fill="none">
+                        <path d="M-32 96 l-4 -5 l3 -1 l-4 -5" />
+                        <path d="M-6 96 l4 -5 l-3 -1 l4 -5" />
+                      </g>
+                    )}
+                  </g>
+                )}
               </Limb>
 
               {/* neck, torso */}
@@ -181,6 +224,15 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
                 <rect x={12} y={105} width={10} height={7} rx={2} fill="#fff" opacity={0.85} />
               </Limb>
 
+              {/* stress: a halo around the head that tightens and quickens with the score */}
+              <AnimatePresence>
+                {halo && (
+                  <motion.circle key="stress" cx={120} cy={50} r={35} fill="none" stroke={halo.color} strokeWidth={2} strokeDasharray="3 5"
+                    className="twin-part twin-stress" initial={{ opacity: 0 }} animate={{ opacity: halo.opacity }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.6 }} />
+                )}
+              </AnimatePresence>
+
               {/* head */}
               <circle cx={120} cy={50} r={27} fill="url(#twin-skin)" stroke="var(--line-strong)" strokeWidth={1.5} />
               {asleep ? (
@@ -215,6 +267,9 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
               stroke="var(--line-strong)" strokeWidth={1} fill="none" strokeDasharray="2 3">
               <path d="M226 158 L262 130 L300 130" />
               <path d="M180 150 L150 128 L120 128" />
+              {stress != null && <path d="M184 52 L166 44 L150 44" />}
+              {temp != null && <path d="M150 222 L136 214 L124 214" />}
+              {eda != null && <path d="M154 230 L136 250 L124 250" />}
             </motion.g>
           )}
         </AnimatePresence>
@@ -225,18 +280,39 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
         {!asleep ? (
           <motion.div key="awake" className="absolute inset-0 hidden sm:block" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Callout style={at(300, 130)} side="right" icon={<HeartPulse size={13} style={{ color: vital.heart }} />}
-              text={hr != null ? `${fmtNumber(hr)} bpm` : "—"} muted={!hrFresh} />
+              text={hr != null ? `${fmtNumber(hr)} bpm` : "—"} sub={hrv != null ? `HRV ${fmtNumber(hrv)} ms` : undefined} muted={!hrFresh}
+              alert={hrAlert ? tone.warn : undefined}
+              title={`Heart rate · ${statusLabel(state.heart_rate.status)} · ${age(state.heart_rate.time)}${hrv != null ? `\nHRV (RMSSD) ${fmtNumber(hrv)} ms · ${age(state.hrv_rmssd.time)}` : ""}`} />
             <Callout style={at(120, 128)} side="left" icon={<Wind size={13} style={{ color: vital.oxygen }} />}
-              text={`${fmtNumber(state.spo2.value as number)}% · ${fmtNumber(rr)}/min`} muted={state.spo2.value == null} />
+              text={`${fmtNumber(state.spo2.value as number)}% · ${fmtNumber(rr)}/min`} muted={state.spo2.value == null}
+              alert={spo2Alert ? tone.warn : undefined}
+              title={`SpO₂ · ${statusLabel(state.spo2.status)} · ${age(state.spo2.time)}\nBreathing rate · ${age(state.respiration_rate.time)}`} />
             <Callout style={at(306, 200)} side="right"
-              icon={<span className="size-2.5 rounded-full border-2" style={{ borderColor: vital.glucose }} />}
+              icon={<span className="size-2.5 rounded-full border-2" style={{ borderColor: isBand(gBand) ? band[gBand] : vital.glucose }} />}
               text={state.glucose.value != null ? `CGM ${fmtNumber(state.glucose.value as number)} ${state.glucose.trend ? TREND_GLYPH[state.glucose.trend] : ""}` : "CGM —"}
-              muted={state.glucose.status === "stale"} />
+              muted={state.glucose.status === "stale"} alert={gAlert && isBand(gBand) ? band[gBand] : undefined}
+              title={`Glucose · ${statusLabel(gBand)}${state.glucose.trend ? ` · ${TREND_LABEL[state.glucose.trend]}` : ""} · ${age(state.glucose.time)}`} />
             <Callout style={at(306, 262)} side="right" icon={<Watch size={13} style={{ color: vital.activity }} />}
               text={state.steps_today.value == null && state.active_kcal.value != null
                 ? `${fmtNumber(state.active_kcal.value as number, 1)} kcal/min`
                 : `${fmtNumber(state.steps_today.value as number)} steps`}
               muted={state.steps_today.value == null && state.active_kcal.value == null} />
+            {stress != null && (
+              <Callout style={at(150, 44)} side="left" icon={<Brain size={13} className="text-ink-2" />}
+                text={`Stress ${fmtNumber(stress)}${stressLvl ? ` · ${STRESS_LABEL[stressLvl]}` : ""}`}
+                muted={state.stress.status === "stale"} alert={stressLvl === "high" ? tone.warn : undefined}
+                title={`Stress score 0–99 · ${age(state.stress.time)}`} />
+            )}
+            {temp != null && (
+              <Callout style={at(124, 214)} side="left" icon={<Thermometer size={13} className="text-ink-2" />}
+                text={`${fmtNumber(temp, 1)} °C`} muted={state.skin_temp.status === "stale"}
+                title={`Skin temperature (wrist) · ${age(state.skin_temp.time)}`} />
+            )}
+            {eda != null && (
+              <Callout style={at(124, 250)} side="left" icon={<Zap size={13} className="text-ink-2" />}
+                text={`EDA ${fmtNumber(eda, 2)} µS`} muted={state.eda.status === "stale"}
+                title={`Electrodermal activity (skin conductance) · ${age(state.eda.time)}`} />
+            )}
           </motion.div>
         ) : (
           <motion.div key="asleep" className="absolute inset-x-0 bottom-3 flex justify-center" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -259,6 +335,7 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
         >
           {asleep ? <Moon size={13} /> : <Footprints size={13} style={{ color: vital.activity }} />}
           {POSTURE_LABEL[level] ?? statusLabel(level)}
+          {met != null && <span className="tabular-nums text-ink-3">· {fmtNumber(met, 1)} MET</span>}
           {!live && <span className="text-ink-3">· {pausedLabel ?? `last seen ${now ? fmtAge(state.glucose.time ?? state.heart_rate.time, now) : "—"}`}</span>}
         </motion.span>
       </div>
@@ -266,6 +343,7 @@ export function TwinFigure({ state, glucosePulse, now, pausedLabel, className }:
   );
 }
 
+const STRESS_LABEL: Record<string, string> = { rest: "resting", low: "low", medium: "medium", high: "high" };
 const TREND_GLYPH: Record<string, string> = { rising_fast: "⇈", rising: "↗", steady: "→", falling: "↘", falling_fast: "⇊" };
 const POSTURE_LABEL: Record<string, string> = {
   sedentary: "Resting",
@@ -294,18 +372,38 @@ function Limb({ origin, d, width, className, children }: {
   );
 }
 
-function Callout({ style, side, icon, text, muted }: { style: CSSProperties; side: "left" | "right"; icon: ReactNode; text: string; muted?: boolean }) {
+/** A reading pinned beside the body part that measures it. `alert` (a band or status colour)
+ *  rings it when the reading is out of range; `title` holds the status and age. */
+function Callout({ style, side, icon, text, sub, muted, alert, title }: {
+  style: CSSProperties;
+  side: "left" | "right";
+  icon: ReactNode;
+  text: string;
+  /** a second, smaller line (e.g. HRV under the heart rate) */
+  sub?: string;
+  muted?: boolean;
+  alert?: string;
+  title?: string;
+}) {
   return (
     <span
+      title={title}
       className={cn(
-        "absolute inline-flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface/95 px-2.5 py-1 text-xs font-medium tabular-nums shadow-card backdrop-blur",
+        "absolute inline-flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap border border-line bg-surface/95 px-2.5 py-1 text-xs font-medium tabular-nums shadow-card backdrop-blur transition-[border-color,box-shadow] duration-500",
         side === "left" && "-translate-x-full",
+        sub ? "rounded-xl" : "rounded-full",
         muted ? "text-ink-3" : "text-ink",
       )}
-      style={style}
+      style={{ ...style, ...(alert && !muted ? { borderColor: alert, boxShadow: `0 0 0 3px color-mix(in srgb, ${alert} 14%, transparent)` } : null) }}
     >
       {icon}
-      {text}
+      {sub ? (
+        <span className="flex flex-col leading-tight">
+          {text}
+          <span className="text-[10px] font-normal text-ink-3">{sub}</span>
+        </span>
+      ) : text}
+      {alert && !muted && <span aria-hidden className="size-1.5 rounded-full" style={{ background: alert }} />}
     </span>
   );
 }

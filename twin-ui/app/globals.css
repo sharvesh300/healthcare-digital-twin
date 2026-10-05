@@ -184,6 +184,12 @@
 .twin-z {
   animation: twin-z 3.2s ease-out infinite;
 }
+.twin-stress {
+  animation: twin-stress var(--stress, 3s) ease-in-out infinite;
+}
+.twin-spark {
+  animation: twin-spark var(--eda, 3s) linear infinite;
+}
 .twin-paused,
 .twin-paused * {
   animation-play-state: paused !important;
@@ -229,6 +235,14 @@
   10% { opacity: 1; }
   90% { opacity: 1; }
   100% { transform: translateY(520%); opacity: 0; }
+}
+@keyframes twin-stress {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.07) rotate(12deg); }
+}
+@keyframes twin-spark {
+  0%, 62%, 100% { opacity: 0; }
+  68%, 84% { opacity: 1; }
 }
 @keyframes twin-z {
   0% { transform: translate(0, 0) scale(0.7); opacity: 0; }

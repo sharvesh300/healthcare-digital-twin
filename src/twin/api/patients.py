@@ -5,7 +5,7 @@
     GET  /patients/{patient_id}/readings        chart points per metric (live + recorded)
     POST /patients/{patient_id}/devices         pair a live device {"kind": "cgm" | "wearable"}
     WS   /ws/patients/{patient_id}/state        snapshot, then a delta per change, heartbeats
-    WS   /ws/patients/{patient_id}/state/replay?start=&end=&speed=&autoplay=
+    WS   /ws/patients/{patient_id}/state/replay?start=&end=&speed=&autoplay=&at=&live=
                                                 the recorded twin replayed through the same rules
 
 WebSocket messages (server -> client):
@@ -182,6 +182,8 @@ async def _snapshot_context(twin: PatientTwinStateManager, patient_id: UUID, sta
 @router.websocket("/ws/patients/{patient_id}/state/replay")
 async def state_replay(ws: WebSocket, patient_id: UUID, start: datetime, end: datetime,
                        speed: float = Query(120.0, gt=0), autoplay: bool = False,
+                       at: datetime | None = Query(None, description="open the replay here instead of at start"),
+                       live: bool = Query(False, description="also replay the readings streamed by the simulator"),
                        twin: PatientTwinStateManager = Depends(twin_manager)) -> None:
     """Replay the recorded twin between start and end through the twin's own state rules, on
     a clock the viewer drives (play, pause, seek, speed)."""
@@ -198,12 +200,13 @@ async def state_replay(ws: WebSocket, patient_id: UUID, start: datetime, end: da
         return
     tz = twin.rules.tz
     start, end = (t if t.tzinfo else t.replace(tzinfo=tz) for t in (start, end))
+    at = at if at is None or at.tzinfo else at.replace(tzinfo=tz)
     if not start < end <= start + REPLAY_MAX:
         await ws.send_json({"type": "error", "detail": "the window must end after it starts and span at most 7 days"})
         await ws.close(code=4422)
         return
 
-    engine = ReplayEngine(patient_id, await twin.loader.recorded(patient_id, start - WARMUP, end), start, end,
+    engine = ReplayEngine(patient_id, await twin.loader.recorded(patient_id, start - WARMUP, end, live=live), start, end,
                           rules=twin.rules)
     engine.set_speed(speed)
     engine.playing = autoplay
@@ -211,7 +214,7 @@ async def state_replay(ws: WebSocket, patient_id: UUID, start: datetime, end: da
     last = loop.time()
     next_request = asyncio.ensure_future(ws.receive_text())
     try:
-        await ws.send_json(engine.seek(start))
+        await ws.send_json(engine.seek(at or start))
         while True:
             # While playing, wake every tick to advance the clock; while paused, wake on a
             # request or for a keep-alive progress message.

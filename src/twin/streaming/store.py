@@ -53,16 +53,23 @@ class SqlStateLoader:
                   if row["window_start"] else None)
         return {**info, "patient_id": str(row["patient_id"]), "window": window}
 
-    async def recorded(self, patient_id: UUID, since: datetime, until: datetime) -> list[Reading]:
+    async def recorded(self, patient_id: UUID, since: datetime, until: datetime, live: bool = False) -> list[Reading]:
         """The recorded twin between since and until, as readings for a replay: the fused CGM,
         the recorded wearables (beat-level ibi_ms and daily wear_minutes left out) and the
-        sleep stages. Live-simulator data is excluded."""
+        sleep stages. Live-simulator data is excluded unless `live`: then the streamed readings
+        come too, and each recording (glucose, wearables, sleep) runs up to its first streamed
+        reading, as on the charts (series)."""
         p = {"p": patient_id, "a": since, "b": until}
+        recorded, streamed = "NOT m.is_live_simulator", "m.is_live_simulator"
         async with session_scope() as s:
-            glucose = (await s.execute(text(_GLUCOSE_RECORDED), p)).all()
-            wearable = (await s.execute(text(_RECORDED_WEARABLE), p)).all()
-            sleep = (await s.execute(text(_RECORDED_SLEEP), p)).all()
-        return ([Reading(t, "glucose", float(g), "mg/dL", "Fused CGM") for t, g in glucose]
+            glucose = (await s.execute(text(_GLUCOSE_RECORDED_SOURCED), p)).all()
+            wearable = (await s.execute(text(_RECORDED_WEARABLE.format(live=recorded)), p)).all()
+            sleep = (await s.execute(text(_RECORDED_SLEEP.format(live=recorded)), p)).all()
+            if live:
+                glucose = _until_first(glucose, (await s.execute(text(_GLUCOSE_LIVE_SOURCED), p)).all())
+                wearable = _until_first(wearable, (await s.execute(text(_RECORDED_WEARABLE.format(live=streamed)), p)).all())
+                sleep = _until_first(sleep, (await s.execute(text(_RECORDED_SLEEP.format(live=streamed)), p)).all())
+        return ([Reading(t, "glucose", float(g), "mg/dL", src) for t, g, src in glucose]
                 + [Reading(t, code, float(val), unit, src) for t, code, val, unit, src in wearable]
                 + [Reading(a, "sleep", str(stage), None, src, b) for a, b, stage, src in sleep])
 
@@ -139,18 +146,33 @@ WHERE d.patient_id = :p AND {live} AND w.time BETWEEN :a AND :b
 GROUP BY w.time ORDER BY w.time"""
 
 
+_GLUCOSE_RECORDED_SOURCED = """
+SELECT time, glucose_mg_dl, 'Fused CGM' FROM ts.glucose_fused WHERE patient_id = :p AND time BETWEEN :a AND :b"""
+_GLUCOSE_LIVE_SOURCED = """
+SELECT r.time, r.glucose_mg_dl, m.manufacturer || ' ' || m.model_name FROM ts.glucose_reading r
+JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
+WHERE d.patient_id = :p AND m.is_live_simulator AND m.kind = 'cgm' AND r.time BETWEEN :a AND :b"""
+# {live}: which devices, recorded ("NOT m.is_live_simulator") or streamed ("m.is_live_simulator")
 _RECORDED_WEARABLE = """
 SELECT w.time, wm.code, w.value, wm.unit, m.manufacturer || ' ' || m.model_name
 FROM ts.wearable_sample w
 JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
 JOIN ref.wearable_metric wm ON wm.metric_id = w.metric_id
-WHERE d.patient_id = :p AND NOT m.is_live_simulator AND wm.code NOT IN ('ibi_ms', 'wear_minutes')
+WHERE d.patient_id = :p AND {live} AND wm.code NOT IN ('ibi_ms', 'wear_minutes')
   AND w.time BETWEEN :a AND :b"""
 _RECORDED_SLEEP = """
 SELECT s.start_time, s.end_time, s.stage, m.manufacturer || ' ' || m.model_name
 FROM ts.sleep_segment s
 JOIN core.device d USING (device_id) JOIN ref.device_model m USING (model_id)
-WHERE d.patient_id = :p AND NOT m.is_live_simulator AND s.end_time > :a AND s.start_time <= :b"""
+WHERE d.patient_id = :p AND {live} AND s.end_time > :a AND s.start_time <= :b"""
+
+
+def _until_first(recorded: Sequence[Sequence], streamed: Sequence[Sequence]) -> list:
+    """Recorded rows before the first streamed one (rows start with their time), then the streamed rows."""
+    if not streamed:
+        return list(recorded)
+    cut = min(r[0] for r in streamed)
+    return [r for r in recorded if r[0] < cut] + list(streamed)
 
 
 # ── transitions ──────────────────────────────────────────────────────

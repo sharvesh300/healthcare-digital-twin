@@ -111,6 +111,16 @@ def test_replay_socket_plays_to_the_end(client, loader):
         assert snap["type"] == "snapshot" and snap["state"]["glucose"]["value"] == 190.0
 
 
+def test_replay_socket_opens_at_a_moment_paused(client, loader):
+    pid = loader.add(READINGS)
+    q = lambda t: t.isoformat().replace('+', '%2B')  # noqa: E731
+    url = f"/ws/patients/{pid}/state/replay?start={q(START)}&end={q(END)}&at={q(START + timedelta(minutes=15))}&live=true"
+    with client.websocket_connect(url) as ws:
+        snap = ws.receive_json()
+    assert snap["state"]["glucose"]["value"] == 200.0
+    assert snap["replay"]["status"] == "paused" and snap["replay"]["cursor"] == "2026-10-04T09:15:00-05:00"
+
+
 def test_replay_socket_rejects_a_bad_window(client, loader):
     pid = loader.add(READINGS)
     url = f"/ws/patients/{pid}/state/replay?start={END.isoformat().replace('+', '%2B')}&end={START.isoformat().replace('+', '%2B')}"

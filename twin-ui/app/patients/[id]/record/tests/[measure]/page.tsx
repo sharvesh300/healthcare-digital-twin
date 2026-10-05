@@ -76,7 +76,7 @@ export default async function TestDetailPage({ params }: PageProps<"/patients/[i
         <Card className="col-span-12 p-5 lg:col-span-8">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every result" meta={`${d.results.length}, newest first`} />
           <div className="mt-3">
-            <EntryTable caption={`Every ${m.display} result`}
+            <EntryTable caption={`Every ${m.display} result`} noun="results"
               columns={[{ label: "Date", width: "130px" }, { label: "Result", width: "minmax(0,1fr)" }, { label: "Flag", width: "90px" },
                 { label: "Visit", width: "minmax(0,1.4fr)" }, { label: "Source", width: "90px", align: "right" }]}
               rows={[...d.results].reverse().map((r, i) => ({

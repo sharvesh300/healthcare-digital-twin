@@ -59,7 +59,7 @@ export default async function ConditionDetailPage({ params }: PageProps<"/patien
         <Card className="col-span-12 p-5 lg:col-span-8">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every episode" meta={`${d.episodes.length}, newest first`} />
           <div className="mt-3">
-            <EntryTable caption={`Every episode of ${c.display}`}
+            <EntryTable caption={`Every episode of ${c.display}`} noun="episodes"
               columns={[{ label: "Onset", width: "130px" }, { label: "Resolved", width: "130px" }, { label: "Lasted", width: "100px" },
                 { label: "Recorded at", width: "minmax(0,1fr)" }]}
               rows={[...d.episodes].reverse().map((e, i) => ({

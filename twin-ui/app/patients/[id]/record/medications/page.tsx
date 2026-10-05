@@ -2,6 +2,7 @@ import { History, Pill } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { CollapsibleSection } from "@/components/record/collapsible";
 import { FilterLinks } from "@/components/record/filters";
 import { Breadcrumbs, Empty, PageTitle, SectionCard, Synthetic } from "@/components/record/parts";
 import { MedicationRow, RowList } from "@/components/record/rows";
@@ -47,8 +48,9 @@ export default async function MedicationsPage({ params, searchParams }: PageProp
       </SectionCard>
 
       {singleDay.length > 0 && (
-        <SectionCard id="single-day" icon={<History aria-hidden size={14} className="text-ink-3" />} title="Given during a visit"
-          meta={`${singleDay.length} · anaesthesia, one-off doses`}>
+        <CollapsibleSection id="single-day" icon={<History aria-hidden size={14} className="text-ink-3" />} title="Given during a visit"
+          meta={`${singleDay.length} · anaesthesia, one-off doses`}
+          preview={<span className="text-xs text-ink-3">{singleDay.map((m) => capitalise(m.medication)).join(" · ")}</span>}>
           <ul className="-mx-2 divide-y divide-line">
             {singleDay.map((m) => (
               <li key={m.rxcui}>
@@ -65,7 +67,7 @@ export default async function MedicationsPage({ params, searchParams }: PageProp
               </li>
             ))}
           </ul>
-        </SectionCard>
+        </CollapsibleSection>
       )}
     </div>
   );

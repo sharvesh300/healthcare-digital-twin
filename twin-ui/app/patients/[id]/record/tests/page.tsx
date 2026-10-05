@@ -1,8 +1,9 @@
 import { FlaskConical } from "lucide-react";
 import type { Metadata } from "next";
 
+import { CollapsibleSection } from "@/components/record/collapsible";
 import { FilterLinks } from "@/components/record/filters";
-import { Breadcrumbs, Empty, PageTitle, SectionCard } from "@/components/record/parts";
+import { Breadcrumbs, Empty, PageTitle } from "@/components/record/parts";
 import { MeasureRow, RowList } from "@/components/record/rows";
 import { api } from "@/lib/api/server";
 import { recordHref } from "@/lib/record/href";
@@ -39,12 +40,19 @@ export default async function TestsPage({ params, searchParams }: PageProps<"/pa
           options={[{ value: null, label: "Any result" }, { value: "out_of_range", label: "Out of range", count: outCount }]} />
       </div>
       {panels.length ? (
-        panels.map((p) => (
-          <SectionCard key={p.panel} id={p.panel} icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />}
-            title={p.display} meta={`${p.measures.length} test${p.measures.length === 1 ? "" : "s"}`}>
-            <RowList>{p.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
-          </SectionCard>
-        ))
+        <div className="space-y-3">
+          {panels.map((p) => {
+            const flaggedHere = p.measures.filter((m) => out(m.latest.flag));
+            return (
+              <CollapsibleSection key={p.panel} id={`panel:${p.panel}`} icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />}
+                title={p.display} defaultOpen={Boolean(panel) || flagged || flaggedHere.length > 0}
+                meta={`${p.measures.length} test${p.measures.length === 1 ? "" : "s"}${flaggedHere.length ? ` · ${flaggedHere.length} out of range` : ""}`}
+                preview={<span className="text-xs text-ink-3">{p.measures.map((m) => m.display).join(" · ")}</span>}>
+                <RowList>{p.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
+              </CollapsibleSection>
+            );
+          })}
+        </div>
       ) : (
         <Empty>{flagged ? "No test is out of range at its latest result." : "No tests or vitals recorded."}</Empty>
       )}

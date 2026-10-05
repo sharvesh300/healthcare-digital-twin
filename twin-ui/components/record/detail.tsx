@@ -7,6 +7,7 @@ import type { VisitBrief } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fmtDay, visitClass } from "@/lib/record/format";
 
+import { ShowMore } from "./collapsible";
 import { Breadcrumbs } from "./parts";
 
 /** The top of every detail page: breadcrumbs, title with badges, and stat tiles. */
@@ -63,7 +64,14 @@ export interface Column {
 
 /** Every occurrence of an entry (results, episodes, prescriptions). A table from sm up;
  *  on phones each row stacks, its cells labelled. */
-export function EntryTable({ columns, rows, caption }: { columns: Column[]; rows: { key: string; cells: ReactNode[]; strong?: boolean }[]; caption: string }) {
+export function EntryTable({ columns, rows, caption, limit = 10, noun }: {
+  columns: Column[];
+  rows: { key: string; cells: ReactNode[]; strong?: boolean }[];
+  caption: string;
+  /** rows shown before "Show all" */
+  limit?: number;
+  noun?: string;
+}) {
   const template = columns.map((c) => c.width).join(" ");
   return (
     <div role="table" aria-label={caption} className="text-sm">
@@ -73,7 +81,7 @@ export function EntryTable({ columns, rows, caption }: { columns: Column[]; rows
         ))}
       </div>
       <div role="rowgroup" className="divide-y divide-line">
-        {rows.map((r) => (
+        <ShowMore limit={limit} noun={noun} items={rows.map((r) => (
           <div key={r.key} role="row" className={cn("grid grid-cols-2 gap-x-3 gap-y-1 px-2 py-2.5 sm:[grid-template-columns:var(--cols)] sm:items-center",
             r.strong && "bg-[color-mix(in_srgb,var(--status-warn)_4%,transparent)]")}
             style={{ ["--cols" as string]: template }}>
@@ -84,7 +92,7 @@ export function EntryTable({ columns, rows, caption }: { columns: Column[]; rows
               </span>
             ))}
           </div>
-        ))}
+        ))} />
       </div>
     </div>
   );

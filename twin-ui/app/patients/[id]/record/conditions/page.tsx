@@ -1,8 +1,9 @@
 import { ClipboardList, Stethoscope } from "lucide-react";
 import type { Metadata } from "next";
 
+import { CollapsibleSection } from "@/components/record/collapsible";
 import { FilterLinks } from "@/components/record/filters";
-import { Breadcrumbs, Empty, PageTitle, SectionCard } from "@/components/record/parts";
+import { Breadcrumbs, Empty, PageTitle } from "@/components/record/parts";
 import { ConditionRow, RowList } from "@/components/record/rows";
 import { api } from "@/lib/api/server";
 import { recordHref } from "@/lib/record/href";
@@ -40,14 +41,15 @@ export default async function ConditionsPage({ params, searchParams }: PageProps
       {sections.map(({ kind: k, title, icon: Icon }) => {
         const list = items.filter((c) => c.kind === k);
         return (
-          <SectionCard key={k} icon={<Icon aria-hidden size={14} className="text-ink-3" />} title={title}
-            meta={`${list.length} · ${list.filter((c) => c.active).length} active`}>
+          <CollapsibleSection key={k} id={`conditions:${k}`} icon={<Icon aria-hidden size={14} className="text-ink-3" />} title={title}
+            meta={`${list.length} · ${list.filter((c) => c.active).length} active`} defaultOpen
+            preview={<span className="text-xs text-ink-3">{list.slice(0, 6).map((c) => c.display).join(" · ")}{list.length > 6 ? ` · +${list.length - 6} more` : ""}</span>}>
             {list.length ? (
               <RowList>{list.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
             ) : (
               <Empty>Nothing matches these filters.</Empty>
             )}
-          </SectionCard>
+          </CollapsibleSection>
         );
       })}
     </div>

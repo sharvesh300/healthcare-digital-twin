@@ -72,7 +72,7 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
         <Card className="col-span-12 p-5 lg:col-span-8">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every prescription" meta={`${d.episodes.length}, newest first`} />
           <div className="mt-3">
-            <EntryTable caption={`Every prescription of ${name}`}
+            <EntryTable caption={`Every prescription of ${name}`} noun="prescriptions"
               columns={[{ label: "Product", width: "minmax(0,1.6fr)" }, { label: "Dosage", width: "minmax(0,1fr)" },
                 { label: "Started", width: "120px" }, { label: "Ended", width: "120px" }, { label: "Prescribed at", width: "minmax(0,1fr)" }]}
               rows={[...d.episodes].reverse().map((e) => ({

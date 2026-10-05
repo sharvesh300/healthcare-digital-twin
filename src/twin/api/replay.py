@@ -5,6 +5,7 @@
                                             -> recorded history, straight from the database
     /patients/{patient_id}, /ws/patients/{patient_id}/state, /ingest/events
                                             -> the live twin, see twin.api.patients / twin.api.ingest
+    /patients/{patient_id}/record/...       -> the patient record, see twin.api.record
     /twin/...                               -> see twin.api.twin_view
 
 The live twin keeps state in this process: run a single worker.
@@ -22,6 +23,7 @@ from sqlalchemy import select, text
 
 from twin.api.ingest import router as ingest_router
 from twin.api.patients import router as patients_router
+from twin.api.record import router as record_router
 from twin.api.twin_view import router as twin_router
 from twin.config import settings
 from twin.db import dispose_engine, engine, session_scope
@@ -52,6 +54,7 @@ app = FastAPI(title="Healthcare digital twin API", lifespan=lifespan)
 app.include_router(twin_router)
 app.include_router(patients_router)
 app.include_router(ingest_router)
+app.include_router(record_router)
 
 
 @app.get("/health")

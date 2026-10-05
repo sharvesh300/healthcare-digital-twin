@@ -68,10 +68,36 @@ patient_conditions = Table(
 medication_regimen = Table(
     "medication_regimen", views,
     Column("patient_id", UUID), Column("regimen_id", BigInteger), Column("rxcui", Integer),
-    Column("medication", Text), Column("drug_class", Text), Column("glucose_lowering", Boolean),
+    Column("medication", Text), Column("product_rxcui", Text), Column("product", Text),
+    Column("drug_class", Text), Column("drug_class_display", Text), Column("glucose_lowering", Boolean),
     Column("started_at", TS), Column("ended_at", TS), Column("active", Boolean),
     _num("dose_value"), Column("dose_unit", Text), _num("times_per_day"), Column("as_needed", Boolean),
-    Column("source", Text), Column("is_synthetic", Boolean),
+    Column("encounter_id", UUID), Column("source", Text), Column("is_synthetic", Boolean),
+    schema="report",
+)
+
+condition_episode = Table(
+    "condition_episode", views,
+    Column("patient_id", UUID), Column("concept_id", Integer), Column("system", Text), Column("code", Text),
+    Column("display", Text), Column("kind", Text), Column("condition_group", Text),
+    Column("condition_group_display", Text), Column("onset_at", TS), Column("abated_at", TS),
+    Column("active", Boolean), Column("encounter_id", UUID), Column("source", Text), Column("is_synthetic", Boolean),
+    schema="report",
+)
+
+observation_result = Table(
+    "observation_result", views,
+    Column("patient_id", UUID), Column("analyte", Text), Column("loinc", Text), Column("loinc_display", Text),
+    Column("category", Text), Column("effective_at", TS), _num("value_num"), Column("value_text", Text),
+    Column("ucum_unit", Text), Column("encounter_id", UUID), Column("source", Text), Column("is_synthetic", Boolean),
+    schema="report",
+)
+
+visit = Table(
+    "visit", views,
+    Column("patient_id", UUID), Column("encounter_id", UUID), Column("encounter_class", Text), Column("type", Text),
+    Column("reason", Text), Column("started_at", TS), Column("ended_at", TS), Column("source", Text),
+    Column("is_synthetic", Boolean),
     schema="report",
 )
 

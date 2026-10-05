@@ -139,13 +139,17 @@ JOIN ref.condition_group cg ON cg.group_id = cp.condition_group_id
 JOIN ref.data_source ds USING (source_id)
 GROUP BY c.patient_id, cg.code;
 
--- Medication regimens with ingredient, twin drug class and provenance.
+-- Medication regimens with ingredient, the product prescribed, twin drug class, the visit
+-- it was first prescribed at, and provenance.
 CREATE VIEW report.medication_regimen AS
 SELECT r.patient_id,
        r.regimen_id,
        m.medication_id                                AS rxcui,
        m.name                                         AS medication,
+       r.product_rxcui,
+       mp.display                                     AS product,
        dc.code                                        AS drug_class,
+       dc.display                                     AS drug_class_display,
        coalesce(dc.glucose_lowering, false)           AS glucose_lowering,
        r.started_at,
        r.ended_at,
@@ -154,11 +158,74 @@ SELECT r.patient_id,
        r.dose_unit,
        r.times_per_day,
        r.as_needed,
+       r.encounter_id,
        ds.code                                        AS source,
        ds.is_synthetic
 FROM core.medication_regimen r
 JOIN ref.medication m USING (medication_id)
+LEFT JOIN ref.medication_product mp ON mp.product_rxcui = r.product_rxcui AND mp.medication_id = r.medication_id
 LEFT JOIN ref.drug_class dc ON dc.class_id = m.drug_class_id
+JOIN ref.data_source ds USING (source_id);
+
+-- One row per condition episode (the same concept can recur: bronchitis, stress, ...).
+--   display   the concept's name without its SNOMED semantic tag ("Acute bronchitis")
+--   kind      'diagnosis' for disorders and anything in a clinical group; 'finding' for social
+--             findings, situations and other tagged concepts (employment, stress, history of ...)
+CREATE VIEW report.condition_episode AS
+SELECT c.patient_id,
+       c.concept_id,
+       cp.system,
+       cp.code,
+       regexp_replace(cp.display, '\s*\([^()]*\)$', '')  AS display,
+       CASE WHEN cg.code IS NOT NULL OR cp.display ~ '\(disorder\)$' OR cp.display !~ '\)$'
+            THEN 'diagnosis' ELSE 'finding' END             AS kind,
+       cg.code                                              AS condition_group,
+       cg.display                                           AS condition_group_display,
+       c.onset_at,
+       c.abated_at,
+       c.abated_at IS NULL                                  AS active,
+       c.encounter_id,
+       ds.code                                              AS source,
+       ds.is_synthetic
+FROM core.condition c
+JOIN ref.concept cp USING (concept_id)
+LEFT JOIN ref.condition_group cg ON cg.group_id = cp.condition_group_id
+JOIN ref.data_source ds USING (source_id);
+
+-- Every test and vital-sign result, with its analyte, coded answer (if any), the visit it was
+-- recorded at and provenance. The record groups analytes into measures (twin.clinical.measures).
+CREATE VIEW report.observation_result AS
+SELECT o.patient_id,
+       c.analyte,
+       c.loinc,
+       c.display                                      AS loinc_display,
+       c.category,
+       o.effective_at,
+       o.value_num,
+       cp.display                                     AS value_text,
+       c.ucum_unit,
+       o.encounter_id,
+       ds.code                                        AS source,
+       ds.is_synthetic
+FROM core.observation o
+JOIN ref.observation_code c USING (code_id)
+JOIN ref.data_source ds USING (source_id)
+LEFT JOIN ref.concept cp ON cp.concept_id = o.value_concept_id;
+
+-- Visits with their SNOMED type and reason, and provenance.
+CREATE VIEW report.visit AS
+SELECT e.patient_id,
+       e.encounter_id,
+       e.encounter_class::text                                     AS encounter_class,
+       regexp_replace(t.display, '\s*\([^()]*\)$', '')          AS type,
+       regexp_replace(r.display, '\s*\([^()]*\)$', '')          AS reason,
+       e.started_at,
+       e.ended_at,
+       ds.code                                                     AS source,
+       ds.is_synthetic
+FROM core.encounter e
+LEFT JOIN ref.concept t ON t.concept_id = e.type_concept_id
+LEFT JOIN ref.concept r ON r.concept_id = e.reason_concept_id
 JOIN ref.data_source ds USING (source_id);
 
 -- Readings from live-simulator devices (ref.device_model.is_live_simulator, written by

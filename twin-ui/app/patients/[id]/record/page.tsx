@@ -1,14 +1,15 @@
-import { CalendarDays, ClipboardList, Droplet, FlaskConical, History, Info, Pill, Stethoscope } from "lucide-react";
+import { CalendarDays, ChevronRight, ClipboardList, Droplet, FlaskConical, History, Info, Pill, Stethoscope } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { CollapsibleGroup, CollapsibleSection, PreviewChips, SectionNav } from "@/components/record/collapsible";
 import { DailyCgm } from "@/components/record/daily-cgm";
 import { FilterLinks } from "@/components/record/filters";
-import { Empty, FlagChip, SectionCard, StatTile, Synthetic } from "@/components/record/parts";
+import { Empty, FlagChip, StatTile, Synthetic } from "@/components/record/parts";
 import { ConditionRow, MeasureRow, MedicationRow, RowList, VisitRow } from "@/components/record/rows";
 import { api } from "@/lib/api/server";
-import type { MeasureSummary, RecordOverview } from "@/lib/api/types";
-import { fmtDay, resultValue, titleCaseStatus, visitClass } from "@/lib/record/format";
+import type { ConditionSummary, MeasureSummary, RecordOverview } from "@/lib/api/types";
+import { capitalise, fmtDay, resultValue, titleCaseStatus, visitClass } from "@/lib/record/format";
 import { recordHref } from "@/lib/record/href";
 import { fmtNumber } from "@/lib/twin/format";
 
@@ -16,11 +17,14 @@ export const metadata: Metadata = { title: "Record" };
 
 const SECTIONS = [
   ["medications", "Medications"],
-  ["conditions", "Conditions"],
+  ["diagnoses", "Diagnoses"],
+  ["findings", "Social history"],
   ["tests", "Tests and vitals"],
   ["visits", "Visits"],
   ["glucose", "Glucose"],
 ] as const;
+
+const isFlagged = (m: MeasureSummary) => m.latest.flag === "high" || m.latest.flag === "low";
 
 export default async function RecordPage({ params, searchParams }: PageProps<"/patients/[id]/record">) {
   const { id } = await params;
@@ -30,10 +34,12 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
   const outOfRange = query.tests === "out_of_range";
   const panels = outOfRange
     ? r.tests.panels
-        .map((p) => ({ ...p, measures: p.measures.filter((m) => m.latest.flag === "high" || m.latest.flag === "low") }))
+        .map((p) => ({ ...p, measures: p.measures.filter(isFlagged) }))
         .filter((p) => p.measures.length)
     : r.tests.panels;
   const { diagnoses, findings } = r.conditions;
+  const activeMeds = r.medications.items.filter((m) => m.active);
+  const flagged = r.tests.panels.flatMap((p) => p.measures).filter(isFlagged);
 
   return (
     <div className="space-y-5">
@@ -44,102 +50,115 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
 
       <SummaryTiles r={r} href={href} />
 
-      <nav aria-label="Record sections"
-        className="z-10 -mx-1 flex gap-1.5 overflow-x-auto bg-canvas/85 px-1 py-1 backdrop-blur [scrollbar-width:none] lg:sticky lg:top-[133px]">
-        {SECTIONS.map(([key, label]) => (
-          <a key={key} href={`#${key}`}
-            className="whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-2 shadow-card transition-colors hover:border-line-strong hover:text-ink">
-            {label}
-          </a>
-        ))}
-      </nav>
+      <SectionNav sections={SECTIONS.map(([sid, label]) => ({ id: sid, label, defaultOpen: sid === "tests" && outOfRange }))} />
 
-      <SectionCard id="medications" icon={<Pill aria-hidden size={14} className="text-ink-3" />} title="Medications"
-        meta={`${r.medications.active} active · ${r.medications.total} in the record`}
-        action={{ href: href.medications, label: "View all" }}>
-        {r.medications.items.length ? (
-          <RowList>{r.medications.items.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)}</RowList>
-        ) : (
-          <Empty>No medications in the record.</Empty>
-        )}
-        {r.medications.single_day > 0 && (
-          <Link href={`${href.medications}#single-day`} className="mt-2 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
-            <History aria-hidden size={12} /> {r.medications.single_day} more given during a visit only (anaesthesia, one-off doses)
-          </Link>
-        )}
-      </SectionCard>
+      <div className="space-y-3">
+        <CollapsibleSection id="medications" icon={<Pill aria-hidden size={14} className="text-ink-3" />} title="Medications"
+          meta={`${r.medications.active} active · ${r.medications.total} in the record`}
+          action={{ href: href.medications, label: "View all" }}
+          preview={<PreviewChips empty="No active medications."
+            items={activeMeds.slice(0, 4).map((m) => ({ key: String(m.rxcui), href: href.medication(m.rxcui),
+              label: <>{capitalise(m.medication)}{m.dosage.text && <span className="text-ink-3">· {m.dosage.text}</span>}</> }))}
+            more={activeMeds.length - 4} />}>
+          {r.medications.items.length ? (
+            <RowList>{r.medications.items.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)}</RowList>
+          ) : (
+            <Empty>No medications in the record.</Empty>
+          )}
+          {r.medications.single_day > 0 && (
+            <Link href={`${href.medications}#single-day`} className="mt-2 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
+              <History aria-hidden size={12} /> {r.medications.single_day} more given during a visit only (anaesthesia, one-off doses)
+            </Link>
+          )}
+        </CollapsibleSection>
 
-      <div id="conditions" className="grid scroll-mt-48 grid-cols-12 gap-5">
-        <SectionCard className="col-span-12 lg:col-span-7" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
+        <CollapsibleSection id="diagnoses" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
           title="Diagnoses" meta={`${diagnoses.active} active · ${diagnoses.total} in the record`}
-          action={{ href: `${href.conditions}?kind=diagnosis`, label: "View all" }}>
+          action={{ href: `${href.conditions}?kind=diagnosis`, label: "View all" }}
+          preview={<ConditionChips items={diagnoses.items} href={href} empty={`No active diagnoses · ${diagnoses.total} resolved`} />}>
           {diagnoses.items.length ? (
             <RowList>{diagnoses.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
           ) : (
             <Empty>No diagnoses recorded.</Empty>
           )}
-        </SectionCard>
-        <SectionCard className="col-span-12 lg:col-span-5" icon={<ClipboardList aria-hidden size={14} className="text-ink-3" />}
-          title="Social history and findings" meta={`${findings.total}`}
-          action={{ href: `${href.conditions}?kind=finding`, label: "View all" }}>
+        </CollapsibleSection>
+
+        <CollapsibleSection id="findings" icon={<ClipboardList aria-hidden size={14} className="text-ink-3" />}
+          title="Social history and findings" meta={`${findings.active} current · ${findings.total} in the record`}
+          action={{ href: `${href.conditions}?kind=finding`, label: "View all" }}
+          preview={<ConditionChips items={findings.items} href={href} empty="No current findings." />}>
           {findings.items.length ? (
             <RowList>{findings.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
           ) : (
             <Empty>No findings recorded.</Empty>
           )}
-        </SectionCard>
-      </div>
+        </CollapsibleSection>
 
-      <SectionCard id="tests" icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals"
-        meta={`${r.tests.total} tests · ${r.tests.out_of_range} out of range`}
-        action={{ href: href.tests, label: "View all" }}
-        right={<FilterLinks label="Show" name="tests" path={href.overview} params={query}
-          options={[{ value: null, label: "All", count: r.tests.total }, { value: "out_of_range", label: "Out of range", count: r.tests.out_of_range }]} />}>
-        {panels.length ? (
-          <div className="space-y-4">
-            {panels.map((p) => (
-              <section key={p.panel} aria-label={p.display}>
-                <h3 className="label mb-1 flex items-center justify-between">
-                  {p.display}
-                  <Link href={`${href.tests}?panel=${p.panel}`} className="normal-case tracking-normal text-ink-3 hover:text-ink-2">
-                    {p.measures.length} test{p.measures.length === 1 ? "" : "s"}
-                  </Link>
-                </h3>
-                <RowList>{p.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <Empty>{outOfRange ? "Every latest result is within its reference range." : "No tests or vitals recorded."}</Empty>
-        )}
-        {Object.keys(r.derived).length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-xs">
-            <span className="label">Derived</span>
-            {Object.entries(r.derived).map(([k, d]) => (
-              <span key={k} className="inline-flex items-center gap-1.5 text-ink-2">
-                {d.display}
-                <span className="font-semibold tabular-nums text-ink">{fmtNumber(d.value, d.value < 10 ? 2 : 0)}</span>
-                {d.unit && <span className="text-ink-3">{d.unit}</span>}
-                {d.is_synthetic && <Synthetic />}
-              </span>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+        <CollapsibleSection id="tests" icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals"
+          meta={`${r.tests.total} tests · ${r.tests.out_of_range} out of range`} defaultOpen={outOfRange}
+          action={{ href: href.tests, label: "View all" }}
+          controls={<FilterLinks label="Show" name="tests" path={href.overview} params={query}
+            options={[{ value: null, label: "All", count: r.tests.total }, { value: "out_of_range", label: "Out of range", count: r.tests.out_of_range }]} />}
+          preview={<PreviewChips empty="Every latest result is within its reference range."
+            items={flagged.slice(0, 5).map((m) => ({ key: m.measure, href: href.test(m.measure), tone: "warn" as const,
+              label: <>{m.display} <span className="font-semibold tabular-nums">{resultValue(m, m.latest)}</span>{m.latest.flag === "high" ? " ↑" : " ↓"}</> }))}
+            more={flagged.length - 5} />}>
+          {panels.length ? (
+            <div>
+              {panels.map((p) => {
+                const out = p.measures.filter(isFlagged);
+                return (
+                  <CollapsibleGroup key={p.panel} id={`panel:${p.panel}`} title={p.display} defaultOpen={out.length > 0}
+                    meta={`${p.measures.length} test${p.measures.length === 1 ? "" : "s"}${out.length ? ` · ${out.length} out of range` : ""}`}
+                    preview={out.slice(0, 3).map((m) => (
+                      <span key={m.measure} className="whitespace-nowrap rounded-full bg-[color-mix(in_srgb,var(--status-warn)_10%,white)] px-2 py-0.5 text-[11px] text-ink">
+                        {m.display} {m.latest.flag === "high" ? "↑" : "↓"}
+                      </span>
+                    ))}>
+                    <RowList>{p.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
+                    <Link href={`${href.tests}?panel=${p.panel}`} className="mt-1 inline-flex items-center gap-0.5 text-xs text-ink-3 hover:text-ink-2">
+                      Open the {p.display.toLowerCase()} panel <ChevronRight aria-hidden size={12} />
+                    </Link>
+                  </CollapsibleGroup>
+                );
+              })}
+            </div>
+          ) : (
+            <Empty>{outOfRange ? "Every latest result is within its reference range." : "No tests or vitals recorded."}</Empty>
+          )}
+          {Object.keys(r.derived).length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-xs">
+              <span className="label">Derived</span>
+              {Object.entries(r.derived).map(([k, d]) => (
+                <span key={k} className="inline-flex items-center gap-1.5 text-ink-2">
+                  {d.display}
+                  <span className="font-semibold tabular-nums text-ink">{fmtNumber(d.value, d.value < 10 ? 2 : 0)}</span>
+                  {d.unit && <span className="text-ink-3">{d.unit}</span>}
+                  {d.is_synthetic && <Synthetic />}
+                </span>
+              ))}
+            </div>
+          )}
+        </CollapsibleSection>
 
-      <div className="grid grid-cols-12 gap-5">
-        <SectionCard id="visits" className="col-span-12 lg:col-span-5" icon={<CalendarDays aria-hidden size={14} className="text-ink-3" />}
-          title="Visits" meta={`${r.visits.total}`} action={{ href: href.visits, label: "View all" }}>
+        <CollapsibleSection id="visits" icon={<CalendarDays aria-hidden size={14} className="text-ink-3" />}
+          title="Visits" meta={`${r.visits.total} in the record`} action={{ href: href.visits, label: "View all" }}
+          preview={<PreviewChips empty="No visits recorded."
+            items={r.visits.recent.slice(0, 3).map((v) => ({ key: v.encounter_id, href: href.visit(v.encounter_id),
+              label: <><span className="tabular-nums text-ink-3">{fmtDay(v.start)}</span> {v.type ?? visitClass(v.class)}</> }))}
+            more={r.visits.total - 3} />}>
           {r.visits.recent.length ? (
             <RowList>{r.visits.recent.map((v) => <VisitRow key={v.encounter_id} v={v} href={href.visit(v.encounter_id)} />)}</RowList>
           ) : (
             <Empty>No visits recorded.</Empty>
           )}
-        </SectionCard>
-        <SectionCard id="glucose" className="col-span-12 lg:col-span-7" icon={<Droplet aria-hidden size={14} className="text-vital-glucose" />}
-          title="Glucose (CGM)" meta="fused CGM, consensus ranges">
+        </CollapsibleSection>
+
+        <CollapsibleSection id="glucose" icon={<Droplet aria-hidden size={14} className="text-vital-glucose" />}
+          title="Glucose (CGM)" meta="fused CGM, consensus ranges"
+          preview={<GlucosePreview cgm={r.cgm} />}>
           <Glucose id={id} cgm={r.cgm} />
-        </SectionCard>
+        </CollapsibleSection>
       </div>
     </div>
   );
@@ -206,5 +225,28 @@ function Fact({ label, value, unit, hint, small }: { label: string; value: strin
       </div>
       {hint && <div className="mt-0.5 truncate text-[11px] text-ink-3">{hint}</div>}
     </div>
+  );
+}
+
+function ConditionChips({ items, href, empty }: { items: ConditionSummary[]; href: ReturnType<typeof recordHref>; empty: string }) {
+  const active = items.filter((c) => c.active);
+  return (
+    <PreviewChips empty={empty} more={active.length - 4}
+      items={active.slice(0, 4).map((c) => ({ key: String(c.concept_id), href: href.condition(c.concept_id),
+        label: <>{c.display}{c.episodes > 1 && <span className="text-ink-3">×{c.episodes}</span>}</> }))} />
+  );
+}
+
+function GlucosePreview({ cgm }: { cgm: RecordOverview["cgm"] }) {
+  if (!cgm?.window) return <span className="text-xs text-ink-3">No CGM recording for this patient.</span>;
+  const w = cgm.window;
+  return (
+    <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-2">
+      <span className="tabular-nums">{fmtDay(w.period_start)} – {fmtDay(w.period_end)}</span>
+      <span>Mean <span className="font-semibold tabular-nums text-ink">{fmtNumber(w.mean_mg_dl)}</span> mg/dL</span>
+      <span>GMI <span className="font-semibold tabular-nums text-ink">{fmtNumber(w.gmi, 1)}</span> %</span>
+      {cgm.consistency && <span>HbA1c vs GMI <span className="font-medium text-ink">{titleCaseStatus(cgm.consistency.status).toLowerCase()}</span></span>}
+      <span className="text-ink-3">{cgm.daily.length} days</span>
+    </span>
   );
 }

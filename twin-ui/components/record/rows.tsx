@@ -136,8 +136,7 @@ export function VisitCounts({ counts }: { counts: VisitSummary["counts"] }) {
 export function VisitRow({ v, href }: { v: VisitSummary; href: string }) {
   const Icon = VISIT_ICON[v.class] ?? Stethoscope;
   const urgent = v.class === "inpatient" || v.class === "emergency";
-  return (
-    <RowLink href={href}>
+  const body = (
       <div className="flex items-center gap-3">
         <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", urgent ? "bg-[color-mix(in_srgb,var(--status-warn)_12%,white)] text-status-warn" : "bg-surface-2 text-ink-2")}>
           <Icon aria-hidden size={15} />
@@ -156,6 +155,15 @@ export function VisitRow({ v, href }: { v: VisitSummary; href: string }) {
           </div>
         </div>
       </div>
-    </RowLink>
   );
+  // nothing was recorded at it: shown for the history, but there is no page worth opening
+  if (!v.has_records) {
+    return (
+      <li className="flex items-center gap-3 px-2 py-3 opacity-60" title="Nothing was recorded at this visit">
+        <div className="min-w-0 flex-1">{body}</div>
+        <span aria-hidden className="w-4 shrink-0" />
+      </li>
+    );
+  }
+  return <RowLink href={href}>{body}</RowLink>;
 }

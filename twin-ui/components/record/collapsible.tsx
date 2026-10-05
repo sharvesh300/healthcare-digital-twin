@@ -26,7 +26,7 @@ function Reveal({ open, id, children }: { open: boolean; id: string; children: R
 
 /** A record section that opens and closes. Closed, it shows its title, count and a one-line
  *  `preview`; open, its full content and `controls` (filters). The viewer's choice is remembered. */
-export function CollapsibleSection({ id, icon, title, meta, preview, action, controls, defaultOpen = false, children, className }: {
+export function CollapsibleSection({ id, icon, title, meta, preview, action, controls, defaultOpen = false, empty = false, children, className }: {
   id: string;
   icon: ReactNode;
   title: string;
@@ -37,11 +37,26 @@ export function CollapsibleSection({ id, icon, title, meta, preview, action, con
   /** shown while open, beside the title (filters) */
   controls?: ReactNode;
   defaultOpen?: boolean;
-  children: ReactNode;
+  /** nothing recorded: the bar shows `preview` and doesn't open (no "View all" either) */
+  empty?: boolean;
+  children?: ReactNode;
   className?: string;
 }) {
-  const open = useOpen(id, defaultOpen);
+  const stored = useOpen(id, defaultOpen);
+  const open = stored && !empty;
   const bodyId = useId();
+  if (empty) {
+    return (
+      <Card id={id} aria-labelledby={`${id}-title`} className={cn("scroll-mt-48 px-5 py-4", className)}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span aria-hidden className="w-[15px] shrink-0" />
+          {icon}
+          <h2 id={`${id}-title`} className="label shrink-0">{title}</h2>
+          {preview && <span className="text-xs text-ink-3">· {preview}</span>}
+        </div>
+      </Card>
+    );
+  }
   return (
     <Card id={id} aria-labelledby={`${id}-title`} className={cn("scroll-mt-48 p-0", className)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pt-4" style={{ paddingBottom: open ? 0 : undefined }}>

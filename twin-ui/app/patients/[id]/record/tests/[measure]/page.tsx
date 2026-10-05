@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Card, CardHeader } from "@/components/ui/card";
-import { day, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
+import { day, DetailGrid, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
 import { FlagChip, StatTile, Synthetic, Tag } from "@/components/record/parts";
 import { ResultsChart } from "@/components/record/results-chart";
 import { ConditionRow, MedicationRow, RowList } from "@/components/record/rows";
@@ -24,7 +24,8 @@ export default async function TestDetailPage({ params }: PageProps<"/patients/[i
   const m = d.measure;
   const delta = resultDelta(m);
   const range = rangeText(m);
-  const numeric = Object.keys(d.stats.by_analyte).length > 0;
+  // a chart only when there is a trend to see: two or more numeric results
+  const numeric = d.results.filter((r) => Object.keys(r.values).length > 0).length >= 2;
 
   return (
     <div className="space-y-5">
@@ -72,12 +73,13 @@ export default async function TestDetailPage({ params }: PageProps<"/patients/[i
         </Card>
       )}
 
-      <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 p-5 lg:col-span-8">
+      <DetailGrid
+        main={
+        <Card className="p-5">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every result" meta={`${d.results.length}, newest first`} />
           <div className="mt-3">
             <EntryTable caption={`Every ${m.display} result`} noun="results"
-              columns={[{ label: "Date", width: "130px" }, { label: "Result", width: "minmax(0,1fr)" }, { label: "Flag", width: "90px" },
+              columns={[{ label: "Date", width: "130px" }, { label: "Result", width: "minmax(0,1fr)" }, { label: "Flag", width: "90px", hide: !d.results.some((r) => r.flag) },
                 { label: "Visit", width: "minmax(0,1.4fr)" }, { label: "Source", width: "90px", align: "right" }]}
               rows={[...d.results].reverse().map((r, i) => ({
                 key: `${r.at}-${i}`,
@@ -88,17 +90,16 @@ export default async function TestDetailPage({ params }: PageProps<"/patients/[i
                     {resultValue(m, r)}{!r.text && m.unit && <span className="ml-1 text-xs font-normal text-ink-3">{m.unit}</span>}
                   </span>,
                   r.flag ? <FlagChip key="f" flag={r.flag} /> : <span key="f" className="text-ink-3">—</span>,
-                  <VisitCell key="vi" visit={r.visit} href={href.visit} />,
+                  <VisitCell key="vi" visit={r.visit} href={href.visit} source={r.source} />,
                   <span key="s" className="inline-flex items-center gap-1.5 text-xs text-ink-3">
                     {r.is_synthetic ? <Synthetic /> : capitalise(r.source)}
                   </span>,
                 ],
               }))} />
           </div>
-        </Card>
-
-        <div className="col-span-12 space-y-5 lg:col-span-4">
-          <RelatedCard title={`Also in ${m.panel_display}`} empty="No other tests in this panel.">
+        </Card>}
+        related={<>
+          <RelatedCard title={`Also in ${m.panel_display}`}>
             {d.related.panel.length > 0 && (
               <ul className="divide-y divide-line">
                 {d.related.panel.map((s) => (
@@ -114,18 +115,17 @@ export default async function TestDetailPage({ params }: PageProps<"/patients/[i
               </ul>
             )}
           </RelatedCard>
-          <RelatedCard title="Medications that affect it" empty="None in this record.">
+          <RelatedCard title="Medications that affect it">
             {d.related.medications.length > 0 && (
               <RowList>{d.related.medications.map((x) => <MedicationRow key={x.rxcui} m={x} href={href.medication(x.rxcui)} />)}</RowList>
             )}
           </RelatedCard>
-          <RelatedCard title="Diagnoses it tracks" empty="None in this record.">
+          <RelatedCard title="Diagnoses it tracks">
             {d.related.diagnoses.length > 0 && (
               <RowList>{d.related.diagnoses.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
             )}
           </RelatedCard>
-        </div>
-      </div>
+        </>} />
     </div>
   );
 }

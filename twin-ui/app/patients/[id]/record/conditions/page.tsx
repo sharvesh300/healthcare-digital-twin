@@ -20,10 +20,11 @@ export default async function ConditionsPage({ params, searchParams }: PageProps
   const active = param(query, "active");
   const items = all.items.filter((c) => (!kind || c.kind === kind) && (active == null || String(c.active) === active));
   const count = (k: string) => all.items.filter((c) => c.kind === k).length;
+  const ofKind = all.items.filter((c) => !kind || c.kind === kind);
   const sections = [
     { kind: "diagnosis", title: "Diagnoses", icon: Stethoscope },
     { kind: "finding", title: "Social history and findings", icon: ClipboardList },
-  ].filter((s) => !kind || s.kind === kind);
+  ].filter((s) => (!kind || s.kind === kind) && count(s.kind) > 0);
 
   return (
     <div className="space-y-5">
@@ -36,8 +37,10 @@ export default async function ConditionsPage({ params, searchParams }: PageProps
           options={[{ value: null, label: "All", count: all.total }, { value: "diagnosis", label: "Diagnoses", count: count("diagnosis") },
             { value: "finding", label: "Findings", count: count("finding") }]} />
         <FilterLinks label="Status" name="active" path={href.conditions} params={query}
-          options={[{ value: null, label: "Any status" }, { value: "true", label: "Active" }, { value: "false", label: "Resolved" }]} />
+          options={[{ value: null, label: "Any status" }, { value: "true", label: "Active", count: ofKind.filter((c) => c.active).length },
+            { value: "false", label: "Resolved", count: ofKind.filter((c) => !c.active).length }]} />
       </div>
+      {sections.length === 0 && <Empty>No conditions in the record.</Empty>}
       {sections.map(({ kind: k, title, icon: Icon }) => {
         const list = items.filter((c) => c.kind === k);
         return (

@@ -39,6 +39,17 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
     : r.tests.panels;
   const { diagnoses, findings } = r.conditions;
   const activeMeds = r.medications.items.filter((m) => m.active);
+  const visitsWithRecords = r.visits.recent.filter((v) => v.has_records);
+  // a section with nothing in the record is a quiet bar: it doesn't open and offers no "View all"
+  const empty: Record<(typeof SECTIONS)[number][0], boolean> = {
+    medications: r.medications.total === 0,
+    diagnoses: diagnoses.total === 0,
+    findings: findings.total === 0,
+    tests: r.tests.total === 0,
+    visits: r.visits.total === 0,
+    glucose: !r.cgm?.window,
+  };
+  const none = "None in the record";
   const flagged = r.tests.panels.flatMap((p) => p.measures).filter(isFlagged);
 
   return (
@@ -50,13 +61,14 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
 
       <SummaryTiles r={r} href={href} />
 
-      <SectionNav sections={SECTIONS.map(([sid, label]) => ({ id: sid, label, defaultOpen: sid === "tests" && outOfRange }))} />
+      <SectionNav sections={SECTIONS.filter(([sid]) => !empty[sid])
+        .map(([sid, label]) => ({ id: sid, label, defaultOpen: sid === "tests" && outOfRange }))} />
 
       <div className="space-y-3">
         <CollapsibleSection id="medications" icon={<Pill aria-hidden size={14} className="text-ink-3" />} title="Medications"
           meta={`${r.medications.active} active · ${r.medications.total} in the record`}
-          action={{ href: href.medications, label: "View all" }}
-          preview={<PreviewChips empty="No active medications."
+          action={{ href: href.medications, label: "View all" }} empty={empty.medications}
+          preview={empty.medications ? none : <PreviewChips empty="No active medications."
             items={activeMeds.slice(0, 4).map((m) => ({ key: String(m.rxcui), href: href.medication(m.rxcui),
               label: <>{capitalise(m.medication)}{m.dosage.text && <span className="text-ink-3">· {m.dosage.text}</span>}</> }))}
             more={activeMeds.length - 4} />}>
@@ -74,8 +86,8 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
 
         <CollapsibleSection id="diagnoses" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
           title="Diagnoses" meta={`${diagnoses.active} active · ${diagnoses.total} in the record`}
-          action={{ href: `${href.conditions}?kind=diagnosis`, label: "View all" }}
-          preview={<ConditionChips items={diagnoses.items} href={href} empty={`No active diagnoses · ${diagnoses.total} resolved`} />}>
+          action={{ href: `${href.conditions}?kind=diagnosis`, label: "View all" }} empty={empty.diagnoses}
+          preview={empty.diagnoses ? none : <ConditionChips items={diagnoses.items} href={href} empty={`No active diagnoses · ${diagnoses.total} resolved`} />}>
           {diagnoses.items.length ? (
             <RowList>{diagnoses.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
           ) : (
@@ -85,8 +97,8 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
 
         <CollapsibleSection id="findings" icon={<ClipboardList aria-hidden size={14} className="text-ink-3" />}
           title="Social history and findings" meta={`${findings.active} current · ${findings.total} in the record`}
-          action={{ href: `${href.conditions}?kind=finding`, label: "View all" }}
-          preview={<ConditionChips items={findings.items} href={href} empty="No current findings." />}>
+          action={{ href: `${href.conditions}?kind=finding`, label: "View all" }} empty={empty.findings}
+          preview={empty.findings ? none : <ConditionChips items={findings.items} href={href} empty="No current findings." />}>
           {findings.items.length ? (
             <RowList>{findings.items.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
           ) : (
@@ -96,10 +108,10 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
 
         <CollapsibleSection id="tests" icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals"
           meta={`${r.tests.total} tests · ${r.tests.out_of_range} out of range`} defaultOpen={outOfRange}
-          action={{ href: href.tests, label: "View all" }}
+          action={{ href: href.tests, label: "View all" }} empty={empty.tests}
           controls={<FilterLinks label="Show" name="tests" path={href.overview} params={query}
             options={[{ value: null, label: "All", count: r.tests.total }, { value: "out_of_range", label: "Out of range", count: r.tests.out_of_range }]} />}
-          preview={<PreviewChips empty="Every latest result is within its reference range."
+          preview={empty.tests ? none : <PreviewChips empty="Every latest result is within its reference range."
             items={flagged.slice(0, 5).map((m) => ({ key: m.measure, href: href.test(m.measure), tone: "warn" as const,
               label: <>{m.display} <span className="font-semibold tabular-nums">{resultValue(m, m.latest)}</span>{m.latest.flag === "high" ? " ↑" : " ↓"}</> }))}
             more={flagged.length - 5} />}>
@@ -142,11 +154,12 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
         </CollapsibleSection>
 
         <CollapsibleSection id="visits" icon={<CalendarDays aria-hidden size={14} className="text-ink-3" />}
-          title="Visits" meta={`${r.visits.total} in the record`} action={{ href: href.visits, label: "View all" }}
-          preview={<PreviewChips empty="No visits recorded."
-            items={r.visits.recent.slice(0, 3).map((v) => ({ key: v.encounter_id, href: href.visit(v.encounter_id),
+          title="Visits" meta={`${r.visits.total} in the record · ${r.visits.with_records} with records`}
+          action={{ href: href.visits, label: "View all" }} empty={empty.visits}
+          preview={empty.visits ? none : <PreviewChips empty="Nothing was recorded at the latest visits."
+            items={visitsWithRecords.slice(0, 3).map((v) => ({ key: v.encounter_id, href: href.visit(v.encounter_id),
               label: <><span className="tabular-nums text-ink-3">{fmtDay(v.start)}</span> {v.type ?? visitClass(v.class)}</> }))}
-            more={r.visits.total - 3} />}>
+            more={r.visits.with_records - Math.min(3, visitsWithRecords.length)} />}>
           {r.visits.recent.length ? (
             <RowList>{r.visits.recent.map((v) => <VisitRow key={v.encounter_id} v={v} href={href.visit(v.encounter_id)} />)}</RowList>
           ) : (
@@ -155,8 +168,8 @@ export default async function RecordPage({ params, searchParams }: PageProps<"/p
         </CollapsibleSection>
 
         <CollapsibleSection id="glucose" icon={<Droplet aria-hidden size={14} className="text-vital-glucose" />}
-          title="Glucose (CGM)" meta="fused CGM, consensus ranges"
-          preview={<GlucosePreview cgm={r.cgm} />}>
+          title="Glucose (CGM)" meta={empty.glucose ? undefined : "fused CGM, consensus ranges"} empty={empty.glucose}
+          preview={empty.glucose ? "No CGM recording for this patient" : <GlucosePreview cgm={r.cgm} />}>
           <Glucose id={id} cgm={r.cgm} />
         </CollapsibleSection>
       </div>
@@ -168,18 +181,21 @@ function SummaryTiles({ r, href }: { r: RecordOverview; href: ReturnType<typeof 
   const v = r.summary.last_visit;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-      <StatTile label="Medications" value={r.summary.medications_active} href={`${href.medications}?active=true`}
+      <StatTile label="Medications" value={r.summary.medications_active}
+        href={r.summary.medications_active ? `${href.medications}?active=true` : undefined}
         hint={r.summary.glucose_lowering_active ? `${r.summary.glucose_lowering_active} glucose-lowering` : "none glucose-lowering"}>
         <span className="text-xs text-ink-3">active</span>
       </StatTile>
-      <StatTile label="Diagnoses" value={r.summary.diagnoses_active} href={`${href.conditions}?kind=diagnosis&active=true`}
+      <StatTile label="Diagnoses" value={r.summary.diagnoses_active}
+        href={r.summary.diagnoses_active ? `${href.conditions}?kind=diagnosis&active=true` : r.conditions.diagnoses.total ? `${href.conditions}?kind=diagnosis` : undefined}
         hint={`${r.conditions.diagnoses.total} in the record`}>
         <span className="text-xs text-ink-3">active</span>
       </StatTile>
       {r.summary.headline.slice(0, 3).map((m) => <HeadlineTile key={m.measure} m={m} href={href.test(m.measure)} />)}
       {v && (
-        <StatTile label="Last visit" value={<span className="text-base">{fmtDay(v.start)}</span>} href={href.visit(v.encounter_id)}
-          hint={v.type ?? visitClass(v.class)} />
+        <StatTile label="Last visit" value={<span className="text-base">{fmtDay(v.start)}</span>}
+          href={v.has_records ? href.visit(v.encounter_id) : undefined}
+          hint={v.has_records ? (v.type ?? visitClass(v.class)) : `${v.type ?? visitClass(v.class)} · nothing recorded`} />
       )}
     </div>
   );

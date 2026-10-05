@@ -22,6 +22,10 @@ export default async function MedicationsPage({ params, searchParams }: PageProp
   const lowering = param(query, "glucose_lowering") === "true";
   const keep = (m: (typeof all.items)[number]) => (active == null || String(m.active) === active) && (!lowering || m.glucose_lowering);
   const items = all.items.filter(keep);
+  // each option counts what it would show with the other filter applied
+  const every = [...all.items, ...all.single_day];
+  const byStatus = (a: boolean) => every.filter((m) => m.active === a && (!lowering || m.glucose_lowering)).length;
+  const loweringCount = every.filter((m) => m.glucose_lowering && (active == null || String(m.active) === active)).length;
   const singleDay = all.single_day.filter(keep);
 
   return (
@@ -32,10 +36,11 @@ export default async function MedicationsPage({ params, searchParams }: PageProp
       </PageTitle>
       <div className="flex flex-wrap items-center gap-2">
         <FilterLinks label="Status" name="active" path={href.medications} params={query}
-          options={[{ value: null, label: "All" }, { value: "true", label: "Active", count: all.active }, { value: "false", label: "Stopped" }]} />
+          options={[{ value: null, label: "All" }, { value: "true", label: "Active", count: byStatus(true) },
+            { value: "false", label: "Stopped", count: byStatus(false) }]} />
         <FilterLinks label="Class" name="glucose_lowering" path={href.medications} params={query}
           options={[{ value: null, label: "Any class" },
-            { value: "true", label: "Glucose-lowering", count: all.items.filter((m) => m.glucose_lowering).length }]} />
+            { value: "true", label: "Glucose-lowering", count: loweringCount }]} />
       </div>
 
       <SectionCard icon={<Pill aria-hidden size={14} className="text-ink-3" />} title="Prescriptions"

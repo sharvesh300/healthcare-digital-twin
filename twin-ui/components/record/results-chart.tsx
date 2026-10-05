@@ -164,7 +164,7 @@ export function ResultsChart({ detail, visitBase, height = 240 }: { detail: Meas
             {m.analytes.length > 1 && (
               <div className="text-[11px] text-ink-3">{m.analytes.map((a) => ANALYTE_LABEL[a] ?? a).join(" / ")}</div>
             )}
-            <div className="mt-1 text-[11px] text-ink-2">{h.visit ? `${h.visit.type ?? "Visit"} · click to open` : "Study visit"}</div>
+            <div className="mt-1 text-[11px] text-ink-2">{h.visit ? `${h.visit.type ?? "Visit"} · click to open` : "Not recorded at a visit"}</div>
           </motion.div>
         )}
       </AnimatePresence>

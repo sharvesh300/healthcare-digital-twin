@@ -34,6 +34,14 @@ export function FilterLinks({ label, name, options, path, params }: {
     <nav aria-label={label} className="flex max-w-full overflow-x-auto rounded-control border border-line bg-surface-2 p-0.5 [scrollbar-width:none]">
       {options.map((o) => {
         const active = o.value === current;
+        if (o.count === 0 && !active) {
+          return (
+            <span key={o.label} aria-disabled="true" title="Nothing to show"
+              className="cursor-default whitespace-nowrap rounded-[8px] px-2.5 py-1 text-xs font-medium tabular-nums text-ink-3/60">
+              {o.label}<span className="ml-1">0</span>
+            </span>
+          );
+        }
         return (
           <Link key={o.label} href={withParam(path, params, name, o.value)} aria-current={active ? "true" : undefined} scroll={false}
             className={cn("whitespace-nowrap rounded-[8px] px-2.5 py-1 text-xs font-medium tabular-nums transition-colors",

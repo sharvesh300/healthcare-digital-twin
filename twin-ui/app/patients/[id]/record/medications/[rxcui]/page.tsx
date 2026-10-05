@@ -2,7 +2,7 @@ import { ArrowRight, CalendarRange, ListOrdered } from "lucide-react";
 import type { Metadata } from "next";
 
 import { Card, CardHeader } from "@/components/ui/card";
-import { day, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
+import { day, DetailGrid, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
 import { EpisodeTimeline } from "@/components/record/episode-timeline";
 import { StatTile, StatusPill, Synthetic, Tag } from "@/components/record/parts";
 import { ConditionRow, MeasureRow, RowList } from "@/components/record/rows";
@@ -21,6 +21,8 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
   const d = await orNotFound(api.record.medication(id, rxcui));
   const m = d.medication;
   const name = capitalise(m.medication);
+  // where the current prescription was written, for the header when no dose was recorded
+  const prescribedAt = [...d.episodes].reverse().find((e) => e.visit)?.visit ?? null;
 
   return (
     <div className="space-y-5">
@@ -35,8 +37,15 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
           {m.is_synthetic && <Synthetic />}
         </>}
         tiles={<>
-          <StatTile label="Dosage" value={<span className="text-base">{m.dosage.text ? capitalise(m.dosage.text) : "Not recorded"}</span>}
-            hint={m.dosage.text ? "latest prescription" : "the source gave no dose or frequency"} />
+          {m.dosage.text ? (
+            <StatTile label="Dosage" value={<span className="text-base">{capitalise(m.dosage.text)}</span>} hint="latest prescription" />
+          ) : prescribedAt ? (
+            <StatTile label="Prescribed at" value={<span className="line-clamp-2 text-sm font-medium leading-snug">{prescribedAt.type ?? "Visit"}</span>}
+              href={href.visit(prescribedAt.encounter_id)} hint={fmtDay(prescribedAt.start)} />
+          ) : (
+            <StatTile label="Class" value={<span className="text-sm font-medium">{m.drug_class_display ?? "Unclassified"}</span>}
+              hint={m.glucose_lowering ? "glucose-lowering" : undefined} />
+          )}
           <StatTile label="Product" value={<span className="line-clamp-2 text-sm font-medium leading-snug">{m.product ?? "Not recorded"}</span>}
             hint={`RxNorm ingredient ${m.rxcui}`} />
           <StatTile label={m.active ? "Taking since" : "Taken"} value={<span className="text-base">{fmtMonth(m.started_at)}</span>}
@@ -45,6 +54,7 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
         </>}
       />
 
+      {(d.episodes.length > 1 || d.dose_changes.length > 0) && (
       <Card className="p-5">
         <CardHeader icon={<CalendarRange aria-hidden size={14} className="text-ink-3" />} title="Prescriptions over time"
           meta={d.dose_changes.length ? `${d.dose_changes.length} change${d.dose_changes.length === 1 ? "" : "s"} of product or dose` : undefined} />
@@ -67,13 +77,15 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
           </ul>
         )}
       </Card>
+      )}
 
-      <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 p-5 lg:col-span-8">
+      <DetailGrid
+        main={
+        <Card className="p-5">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every prescription" meta={`${d.episodes.length}, newest first`} />
           <div className="mt-3">
             <EntryTable caption={`Every prescription of ${name}`} noun="prescriptions"
-              columns={[{ label: "Product", width: "minmax(0,1.6fr)" }, { label: "Dosage", width: "minmax(0,1fr)" },
+              columns={[{ label: "Product", width: "minmax(0,1.6fr)" }, { label: "Dosage", width: "minmax(0,1fr)", hide: !d.episodes.some((e) => e.dosage.text) },
                 { label: "Started", width: "120px" }, { label: "Ended", width: "120px" }, { label: "Prescribed at", width: "minmax(0,1fr)" }]}
               rows={[...d.episodes].reverse().map((e) => ({
                 key: String(e.regimen_id),
@@ -82,24 +94,23 @@ export default async function MedicationDetailPage({ params }: PageProps<"/patie
                   <span key="d" className={e.dosage.text ? "text-ink-2" : "text-ink-3"}>{e.dosage.text ? capitalise(e.dosage.text) : "Not recorded"}</span>,
                   day(e.started_at),
                   e.ended_at ? day(e.ended_at) : <StatusPill key="a" active />,
-                  <VisitCell key="v" visit={e.visit} href={href.visit} />,
+                  <VisitCell key="v" visit={e.visit} href={href.visit} source={e.source} />,
                 ],
               }))} />
           </div>
-        </Card>
-        <div className="col-span-12 space-y-5 lg:col-span-4">
-          <RelatedCard title="Diagnosed at the prescribing visits" empty="Nothing was diagnosed at these visits.">
+        </Card>}
+        related={<>
+          <RelatedCard title="Diagnosed at the prescribing visits">
             {d.related.diagnoses.length > 0 && (
               <RowList>{d.related.diagnoses.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)}</RowList>
             )}
           </RelatedCard>
-          <RelatedCard title="Tests it affects" empty={m.drug_class ? "None recorded for this patient." : "No tracked tests for this medication."}>
+          <RelatedCard title="Tests it affects">
             {d.related.measures.length > 0 && (
               <RowList>{d.related.measures.map((x) => <MeasureRow key={x.measure} m={x} href={href.test(x.measure)} />)}</RowList>
             )}
           </RelatedCard>
-        </div>
-      </div>
+        </>} />
     </div>
   );
 }

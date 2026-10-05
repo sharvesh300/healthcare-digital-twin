@@ -2,7 +2,7 @@ import { CalendarRange, ListOrdered } from "lucide-react";
 import type { Metadata } from "next";
 
 import { Card, CardHeader } from "@/components/ui/card";
-import { day, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
+import { day, DetailGrid, DetailHeader, EntryTable, RelatedCard, VisitCell } from "@/components/record/detail";
 import { EpisodeTimeline } from "@/components/record/episode-timeline";
 import { StatTile, StatusPill, Synthetic, Tag } from "@/components/record/parts";
 import { MeasureRow, MedicationRow, RowList } from "@/components/record/rows";
@@ -45,6 +45,7 @@ export default async function ConditionDetailPage({ params }: PageProps<"/patien
         </>}
       />
 
+      {d.episodes.length > 1 && (
       <Card className="p-5">
         <CardHeader icon={<CalendarRange aria-hidden size={14} className="text-ink-3" />} title="Episodes over time"
           right={<span className="hidden text-[11px] text-ink-3 sm:inline">Click an episode to open its visit</span>} />
@@ -54,9 +55,11 @@ export default async function ConditionDetailPage({ params }: PageProps<"/patien
               href: e.visit ? href.visit(e.visit.encounter_id) : undefined }))} />
         </div>
       </Card>
+      )}
 
-      <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 p-5 lg:col-span-8">
+      <DetailGrid
+        main={
+        <Card className="p-5">
           <CardHeader icon={<ListOrdered aria-hidden size={14} className="text-ink-3" />} title="Every episode" meta={`${d.episodes.length}, newest first`} />
           <div className="mt-3">
             <EntryTable caption={`Every episode of ${c.display}`} noun="episodes"
@@ -68,24 +71,23 @@ export default async function ConditionDetailPage({ params }: PageProps<"/patien
                   day(e.onset_at),
                   e.abated_at ? day(e.abated_at) : <StatusPill key="a" active />,
                   <span key="l" className="tabular-nums text-ink-2">{fmtDays(e.duration_days) ?? "ongoing"}</span>,
-                  <VisitCell key="v" visit={e.visit} href={href.visit} />,
+                  <VisitCell key="v" visit={e.visit} href={href.visit} source={e.source} />,
                 ],
               }))} />
           </div>
-        </Card>
-        <div className="col-span-12 space-y-5 lg:col-span-4">
-          <RelatedCard title="Prescribed at these visits" empty="No medications were started at these visits.">
+        </Card>}
+        related={<>
+          <RelatedCard title="Prescribed at these visits">
             {d.related.medications.length > 0 && (
               <RowList>{d.related.medications.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)}</RowList>
             )}
           </RelatedCard>
-          <RelatedCard title="Tests that track it" empty={c.group ? "None recorded for this patient." : "No tracking tests for this condition."}>
+          <RelatedCard title="Tests that track it">
             {d.related.measures.length > 0 && (
               <RowList>{d.related.measures.map((m) => <MeasureRow key={m.measure} m={m} href={href.test(m.measure)} />)}</RowList>
             )}
           </RelatedCard>
-        </div>
-      </div>
+        </>} />
     </div>
   );
 }

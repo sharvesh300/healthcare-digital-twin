@@ -45,49 +45,58 @@ export default async function VisitDetailPage({ params }: PageProps<"/patients/[
         </>}
       />
 
-      <SectionCard icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals at this visit" meta={`${tests}`}>
-        {d.tests.length ? (
-          <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
-            {d.tests.map((p) => (
-              <section key={p.panel} aria-label={p.display}>
-                <h3 className="label mb-1">{p.display}</h3>
-                <ul className="-mx-2 divide-y divide-line">
-                  {p.items.map((t) => (
-                    <li key={t.measure}>
-                      <Link href={href.test(t.measure)} className="group flex items-center justify-between gap-3 rounded-control px-2 py-2 hover:bg-surface-2">
-                        <span className="truncate text-sm text-ink">{t.display}</span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="text-sm font-semibold tabular-nums text-ink">
-                            {resultValue(t, t)}
-                            {!t.text && t.unit && <span className="ml-1 text-xs font-normal text-ink-3">{t.unit}</span>}
+      {v.has_records ? (
+        <>
+        <SectionCard icon={<FlaskConical aria-hidden size={14} className="text-ink-3" />} title="Tests and vitals at this visit" meta={`${tests}`}>
+          {d.tests.length ? (
+            <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
+              {d.tests.map((p) => (
+                <section key={p.panel} aria-label={p.display}>
+                  <h3 className="label mb-1">{p.display}</h3>
+                  <ul className="-mx-2 divide-y divide-line">
+                    {p.items.map((t) => (
+                      <li key={t.measure}>
+                        <Link href={href.test(t.measure)} className="group flex items-center justify-between gap-3 rounded-control px-2 py-2 hover:bg-surface-2">
+                          <span className="truncate text-sm text-ink">{t.display}</span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span className="text-sm font-semibold tabular-nums text-ink">
+                              {resultValue(t, t)}
+                              {!t.text && t.unit && <span className="ml-1 text-xs font-normal text-ink-3">{t.unit}</span>}
+                            </span>
+                            <FlagChip flag={t.flag} />
+                            <ChevronRight aria-hidden size={14} className="text-ink-3" />
                           </span>
-                          <FlagChip flag={t.flag} />
-                          <ChevronRight aria-hidden size={14} className="text-ink-3" />
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <Empty>No tests or vitals were recorded at this visit.</Empty>
-        )}
-      </SectionCard>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <Empty>No tests or vitals were recorded at this visit.</Empty>
+          )}
+        </SectionCard>
 
-      <div className="grid grid-cols-12 gap-5">
-        <SectionCard className="col-span-12 lg:col-span-6" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
-          title="Diagnoses" meta={`${d.diagnoses.recorded.length} recorded · ${d.diagnoses.resolved.length} resolved`}>
-          <Group label="Recorded at this visit" items={d.diagnoses.recorded.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)} />
-          <Group label="Resolved at this visit" items={d.diagnoses.resolved.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)} />
-        </SectionCard>
-        <SectionCard className="col-span-12 lg:col-span-6" icon={<Pill aria-hidden size={14} className="text-ink-3" />}
-          title="Medications" meta={`${d.medications.started.length} started · ${d.medications.stopped.length} stopped`}>
-          <Group label="Prescribed at this visit" items={d.medications.started.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)} />
-          <Group label="Stopped at this visit" items={d.medications.stopped.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)} />
-        </SectionCard>
-      </div>
+        <div className="grid grid-cols-12 gap-5">
+          <SectionCard className="col-span-12 lg:col-span-6" icon={<Stethoscope aria-hidden size={14} className="text-ink-3" />}
+            title="Diagnoses" meta={`${d.diagnoses.recorded.length} recorded · ${d.diagnoses.resolved.length} resolved`}>
+            <Group label="Recorded at this visit" items={d.diagnoses.recorded.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)} />
+            <Group label="Resolved at this visit" items={d.diagnoses.resolved.map((c) => <ConditionRow key={c.concept_id} c={c} href={href.condition(c.concept_id)} />)} />
+          </SectionCard>
+          <SectionCard className="col-span-12 lg:col-span-6" icon={<Pill aria-hidden size={14} className="text-ink-3" />}
+            title="Medications" meta={`${d.medications.started.length} started · ${d.medications.stopped.length} stopped`}>
+            <Group label="Prescribed at this visit" items={d.medications.started.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)} />
+            <Group label="Stopped at this visit" items={d.medications.stopped.map((m) => <MedicationRow key={m.rxcui} m={m} href={href.medication(m.rxcui)} />)} />
+          </SectionCard>
+        </div>
+        </>
+      ) : (
+        <Empty>
+          Nothing was recorded at this visit: no tests, diagnoses or medications.
+          {(d.previous || d.next) && " Step to an earlier or later visit with records above."}
+        </Empty>
+      )}
     </div>
   );
 }
@@ -105,8 +114,9 @@ function StepLinks({ previous, next, href }: { previous: VisitSummary | null; ne
   const step = (v: VisitSummary | null, dir: "prev" | "next") => {
     const Icon = dir === "prev" ? ChevronLeft : ChevronRight;
     const label = dir === "prev" ? "Earlier visit" : "Later visit";
+    // the API steps to the nearest visit that has something recorded
     const cls = "inline-flex items-center gap-1 rounded-control border border-line bg-surface px-3 py-1.5 text-xs font-medium shadow-card";
-    if (!v) return <span className={cn(cls, "cursor-default text-ink-3 opacity-60")} aria-hidden>{dir === "prev" && <Icon size={14} />}{label}{dir === "next" && <Icon size={14} />}</span>;
+    if (!v) return <span className={cn(cls, "cursor-default text-ink-3 opacity-60")} title="No other visit with records" aria-hidden>{dir === "prev" && <Icon size={14} />}{label}{dir === "next" && <Icon size={14} />}</span>;
     return (
       <Link href={href(v.encounter_id)} title={`${v.type ?? visitClass(v.class)}, ${fmtDay(v.start)}`} className={cn(cls, "text-ink-2 hover:text-ink")}>
         {dir === "prev" && <Icon aria-hidden size={14} />}{label}{dir === "next" && <Icon aria-hidden size={14} />}

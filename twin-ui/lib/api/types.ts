@@ -203,6 +203,8 @@ export interface VisitSummary extends VisitBrief, Provenance {
   end: string | null;
   duration_h: number | null;
   counts: { tests: number; diagnoses: number; medications: number };
+  /** anything recorded at it; visits with nothing recorded have no detail worth opening */
+  has_records: boolean;
 }
 
 export interface Dosage {
@@ -306,7 +308,7 @@ export interface RecordOverview {
   medications: RecordSection<MedicationSummary> & { single_day: number };
   conditions: { diagnoses: RecordSection<ConditionSummary>; findings: RecordSection<ConditionSummary> };
   tests: { total: number; out_of_range: number; panels: Panel[] };
-  visits: { total: number; recent: VisitSummary[] };
+  visits: { total: number; with_records: number; recent: VisitSummary[] };
   derived: Record<string, Derived>;
   cgm: TwinRecord["cgm"] | null;
 }

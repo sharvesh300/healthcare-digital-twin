@@ -25,6 +25,9 @@ export default async function TestsPage({ params, searchParams }: PageProps<"/pa
     .map((p) => ({ ...p, measures: p.measures.filter((m) => !flagged || out(m.latest.flag)) }))
     .filter((p) => p.measures.length);
   const outCount = all.panels.flatMap((p) => p.measures).filter((m) => out(m.latest.flag)).length;
+  // each option counts what it would show with the other filter applied
+  const inPanel = all.panels.filter((p) => !panel || p.panel === panel).flatMap((p) => p.measures);
+  const panelCount = (p: (typeof all.panels)[number]) => p.measures.filter((m) => !flagged || out(m.latest.flag)).length;
 
   return (
     <div className="space-y-5">
@@ -34,10 +37,11 @@ export default async function TestsPage({ params, searchParams }: PageProps<"/pa
       </PageTitle>
       <div className="flex flex-wrap items-center gap-2">
         <FilterLinks label="Panel" name="panel" path={href.tests} params={query}
-          options={[{ value: null, label: "All", count: all.total },
-            ...all.panels.map((p) => ({ value: p.panel, label: p.display, count: p.measures.length }))]} />
+          options={[{ value: null, label: "All", count: all.panels.reduce((n, p) => n + panelCount(p), 0) },
+            ...all.panels.map((p) => ({ value: p.panel, label: p.display, count: panelCount(p) }))]} />
         <FilterLinks label="Show" name="flag" path={href.tests} params={query}
-          options={[{ value: null, label: "Any result" }, { value: "out_of_range", label: "Out of range", count: outCount }]} />
+          options={[{ value: null, label: "Any result", count: inPanel.length },
+            { value: "out_of_range", label: "Out of range", count: inPanel.filter((m) => out(m.latest.flag)).length }]} />
       </div>
       {panels.length ? (
         <div className="space-y-3">

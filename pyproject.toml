@@ -20,6 +20,12 @@ dependencies = [
 [project.scripts]
 twin = "twin.cli:app"
 
+[project.optional-dependencies]
+ml = [
+    "statsmodels>=0.15",
+    "torch>=2.13",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

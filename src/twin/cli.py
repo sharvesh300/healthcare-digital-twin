@@ -234,6 +234,30 @@ def train_baselines() -> None:
     population.train(pd.read_parquet(features / "patient_static.parquet"), cfg, log=typer.echo)
 
 
+@app.command("bench-glucose")
+def bench_glucose(
+    models: str = typer.Option(
+        "persistence,linear,arima,sarima,gru,lstm", help="comma-separated: persistence, linear, arima, sarima, gru, lstm"
+    ),
+    run_id: str = typer.Option("cgmacros-real", help="output folder under data/benchmarks/"),
+    seeds: int = typer.Option(3, help="seeds per neural model (metrics are averaged)"),
+    device: str = typer.Option("auto", help="torch device for GRU/LSTM: auto (MPS if available), mps, cpu"),
+    workers: int = typer.Option(0, help="processes for ARIMA/SARIMA fits (0: cores - 1)"),
+) -> None:
+    """Benchmark glucose forecasters at +15/30/60 min on the real CGMacros data (no synthetic inputs)."""
+    from twin.ml.bench.run import MODELS, run
+
+    chosen = [m.strip() for m in models.split(",") if m.strip()]
+    unknown = set(chosen) - set(MODELS)
+    if unknown:
+        raise typer.BadParameter(f"unknown models {sorted(unknown)}; choose from {', '.join(MODELS)}")
+    cfg = settings()
+    table = run(cfg.cgmacros_dir, cfg.data_dir / "benchmarks" / run_id, chosen, seeds, device, workers or None,
+                log=typer.echo)
+    typer.echo(table[["model", "horizon_min", "rmse", "mae", "mard_pct", "skill", "clarke_ab_pct"]]
+               .round(3).to_string(index=False))
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     """Serve the twin API: /patients, /patients/{id} (live twin), /twin/{id} (+timeline, simulations),

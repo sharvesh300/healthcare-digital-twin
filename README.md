@@ -52,6 +52,7 @@ COHORT_DIR=synthea_general KEEP_MODULE=none AGES=35-65 POPULATION=200 SEED=43 \
 scripts/pipeline.sh                       # uv run twin all: init-db + every load step
 uv run twin export-features               # ML feature store -> data/features/*.parquet
 uv run twin train-baselines               # glucose forecaster + HbA1c population model -> data/models/
+uv sync --extra ml && uv run twin bench-glucose   # forecaster benchmark on real CGMacros -> data/benchmarks/
 scripts/replay.sh                         # twin API on http://localhost:8765 (docs at /docs)
 scripts/stream.sh --from-now              # (second terminal) simulated devices stream into the live twin
 ```
@@ -130,6 +131,7 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `export-features` | Writes the `ml` feature store to `data/features/*.parquet` with `DATASET_CARD.md` (see [ML and simulation](#ml-and-simulation)). |
 | `train-baselines` | Trains the glucose forecaster and the NHANES HbA1c model from the exported features, into `data/models/`. |
 | `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. The live twin: `GET /patients/{id}`, `WS /ws/patients/{id}/state`, `POST /ingest/events` (see [Live twin](#live-twin)). One worker. |
+| `bench-glucose` | Not a pipeline step. Benchmarks persistence, linear, ARIMA, SARIMA, GRU and LSTM glucose forecasts at +15/30/60 min on the raw CGMacros files, into `data/benchmarks/<run-id>/` (see [Glucose forecasting benchmark](#glucose-forecasting-benchmark)). Needs `uv sync --extra ml`. |
 | `simulate-stream` | Not a pipeline step. Acts as the patients' devices: replays recorded CGM, wearable and sleep data as live readings into the running API (see [Live twin](#live-twin)). |
 | `stream-reset` | Deletes the live-simulator devices with their readings, and the recorded twin transitions. |
 
@@ -417,6 +419,30 @@ The twin API (`twin serve`, docs at `/docs`):
 - **SGLT2 inhibitor:** adding one raises the predicted HbA1c (+0.1 %), although SGLT2 inhibitors lower HbA1c. This is confounding by indication.
 
 So the simulation endpoints demonstrate the twin's interface. They are not a basis for treatment or lifestyle advice. Causal what-ifs need either within-person data where the intervention varies (ShanghaiT2DM doses, trials) or explicit causal methods, and meal data for glucose.
+
+### Glucose forecasting benchmark
+
+`twin bench-glucose` (`ml/bench/`) compares persistence, linear (ridge), ARIMA, SARIMA, GRU and LSTM at +15, +30 and +60 min. It reads the raw CGMacros files directly, and nothing comes from Synthea, the wearable generator or the database. It uses all 45 participants. Inputs:
+- Dexcom glucose: native readings, recovered from the 1-minute interpolation, on a 5-minute grid.
+- Fitbit heart rate and activity kcal.
+- Logged meal macros: energy, carbs, protein, fat and fiber.
+- Time of day.
+- From `bio.csv`: age, sex, BMI, HbA1c and fasting glucose.
+
+ARIMA and SARIMA are univariate, per participant, with the order picked by AIC; SARIMA adds a daily seasonal AR term (s = 288). Linear, GRU and LSTM are global models that predict the glucose change. The split is chronological per participant (60/15/25 %), and every model is scored on the same test origins. The outputs are `metrics.csv`, `per_patient.csv`, `by_group.csv`, `predictions.parquet` and `REPORT.md` in `data/benchmarks/<run-id>/`.
+
+Test RMSE in mg/dL; skill is 1 − RMSE / RMSE(persistence):
+
+| model | +15 min | +30 min | +60 min | skill @60 |
+|---|---|---|---|---|
+| GRU | **10.0** | **15.8** | **22.4** | 0.197 |
+| LSTM | 10.4 | 16.1 | 22.7 | 0.185 |
+| Linear | 10.0 | 16.6 | 23.9 | 0.141 |
+| SARIMA | 10.3 | 17.4 | 25.7 | 0.078 |
+| ARIMA | 10.3 | 17.4 | 25.8 | 0.074 |
+| Persistence | 12.0 | 19.3 | 27.9 | 0 |
+
+The daily seasonal term adds almost nothing: its median coefficient is 0.02, so SARIMA ≈ ARIMA. On Apple silicon, the GRU trains on MPS, while the LSTM trains on the CPU in a parallel process. The MPS LSTM kernel in torch 2.13 leaks driver memory, so the LSTM is kept off MPS. SARIMA's 291-dimensional Kalman filter dominates the run time, at about 40 min for 45 participants on an M4. Its matrix work runs on each core cluster's shared matrix coprocessor, so adding processes speeds it up only a little.
 
 ## Live twin
 

@@ -258,6 +258,19 @@ def bench_glucose(
                .round(3).to_string(index=False))
 
 
+@app.command("train-glucose-forecaster")
+def train_glucose_forecaster(
+    seeds: int = typer.Option(3, help="GRU seeds in the ensemble"),
+    device: str = typer.Option("auto", help="torch device: auto (MPS if available), mps, cpu"),
+) -> None:
+    """Train the GRU glucose forecaster (+15/30/45/60 min) on real CGMacros data and export it to
+    data/models/glucose_forecast/ (safetensors + meta.json) for the prediction API."""
+    from twin.ml.bench.export import train_and_export
+
+    cfg = settings()
+    train_and_export(cfg.cgmacros_dir, cfg.data_dir / "models" / "glucose_forecast", seeds, device, log=typer.echo)
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     """Serve the twin API: /patients, /patients/{id} (live twin), /twin/{id} (+timeline, simulations),

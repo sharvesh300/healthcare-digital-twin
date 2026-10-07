@@ -27,7 +27,7 @@ import pandas as pd
 from twin.sources import cgmacros
 
 STEP_MIN = 5
-HORIZONS = (15, 30, 60)
+HORIZONS = (15, 30, 45, 60)
 SPLITS = (("train", 0.60), ("valid", 0.75), ("test", 1.0))
 MAX_FILL_STEPS = 6  # input gaps up to 30 min are bridged by interpolating between past readings
 MACROS = ("energy_kcal", "carbs_g", "protein_g", "fat_g", "fiber_g")
@@ -75,30 +75,37 @@ def _bin(values: pd.Series | pd.DataFrame, grid: pd.DatetimeIndex, how: str):
     return out.reindex(grid)
 
 
+def build_frame(native: pd.Series, heart_rate: pd.Series, active_kcal: pd.Series, meals: pd.DataFrame) -> pd.DataFrame:
+    """One patient's 5-minute frame from native Dexcom readings, minute Fitbit values and the
+    meal log, all indexed by naive local wall time. Training (raw CSVs) and serving
+    (twin.prediction, from the database) both build their inputs here.
+    """
+    grid = _grid(native)
+    # Snap each native reading to the nearest grid point (Dexcom clocks drift by a minute or two).
+    snapped = pd.Series(native.to_numpy(dtype=float), index=_snap(native.index, grid))
+    glucose = snapped.groupby(level=0).mean().reindex(grid)
+
+    f = pd.DataFrame(index=grid)
+    f["glucose"] = glucose
+    f["glucose_in"] = _bridge_short_gaps(glucose, MAX_FILL_STEPS)
+    f["hr"] = _bin(heart_rate.astype(float), grid, "mean")
+    f["active_kcal"] = _bin(active_kcal.astype(float), grid, "sum")
+    meal_rows = meals.reindex(columns=list(MACROS)).astype(float).fillna(0.0).assign(meal=1.0)
+    f[[*MACROS, "meal"]] = _bin(meal_rows, grid, "sum").fillna(0.0)
+    minute = grid.hour * 60 + grid.minute
+    f["tod_sin"] = np.sin(2 * np.pi * minute / 1440)
+    f["tod_cos"] = np.cos(2 * np.pi * minute / 1440)
+    return f
+
+
 def load_patient(cgmacros_dir: Path, info: cgmacros.Participant) -> Patient | None:
     df = cgmacros.read_sensor_csv(cgmacros.sensor_csv_path(cgmacros_dir, info.subject_id))
     streams = cgmacros.parse_streams(df)
     native = streams.glucose["Dexcom GL"].astype(float)
     if len(native) < 288:
         return None
-    grid = _grid(native)
-
-    # Snap each native reading to the nearest grid point (Dexcom clocks drift by a minute or two).
-    snapped = pd.Series(native.to_numpy(), index=_snap(native.index, grid))
-    glucose = snapped.groupby(level=0).mean().reindex(grid)
-
-    f = pd.DataFrame(index=grid)
-    f["glucose"] = glucose
-    f["glucose_in"] = _bridge_short_gaps(glucose, MAX_FILL_STEPS)
     fit = streams.fitbit
-    f["hr"] = _bin(fit["heart_rate"], grid, "mean")
-    f["active_kcal"] = _bin(fit["active_kcal"], grid, "sum")
-    meals = streams.meals[list(MACROS)].fillna(0.0)
-    meals = meals.assign(meal=1.0)
-    f[[*MACROS, "meal"]] = _bin(meals, grid, "sum").fillna(0.0)
-    minute = grid.hour * 60 + grid.minute
-    f["tod_sin"] = np.sin(2 * np.pi * minute / 1440)
-    f["tod_cos"] = np.cos(2 * np.pi * minute / 1440)
+    f = build_frame(native, fit["heart_rate"], fit["active_kcal"], streams.meals)
 
     labs = info.labs
     static = {
@@ -108,8 +115,12 @@ def load_patient(cgmacros_dir: Path, info: cgmacros.Participant) -> Patient | No
         "hba1c": labs.get("4548-4", np.nan),
         "fasting_glucose": labs.get("1558-6", np.nan),
     }
+    return Patient(info.subject_id, a1c_group(static["hba1c"]), f, static, chronological_split(f.index))
 
-    # Chronological split with a purge: the origin and its 60-minute target share a split.
+
+def chronological_split(grid: pd.DatetimeIndex) -> np.ndarray:
+    """'train' | 'valid' | 'test' per grid row, purged ('') so an origin and its longest-horizon
+    target share a split."""
     t = (grid - grid[0]) / (grid[-1] - grid[0])
     t_target = (grid + pd.Timedelta(minutes=max(HORIZONS)) - grid[0]) / (grid[-1] - grid[0])
     split = np.full(len(grid), "", dtype=object)
@@ -118,7 +129,7 @@ def load_patient(cgmacros_dir: Path, info: cgmacros.Participant) -> Patient | No
         inside = (t >= lo) & (t_target < hi + 1e-9) if hi < 1 else (t >= lo)
         split[np.asarray(inside)] = name
         lo = hi
-    return Patient(info.subject_id, a1c_group(static["hba1c"]), f, static, split)
+    return split
 
 
 def _snap(index: pd.DatetimeIndex, grid: pd.DatetimeIndex) -> pd.DatetimeIndex:

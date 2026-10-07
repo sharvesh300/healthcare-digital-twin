@@ -73,6 +73,7 @@ class Fitted:
     pred: np.ndarray  # (n_origins, len(HORIZONS))
     fit_s: float
     info: dict
+    state: dict | None = None  # neural models: the best weights (CPU tensors), for export
 
 
 def fit_linear(patients: list[Patient], o: Origins) -> Fitted:

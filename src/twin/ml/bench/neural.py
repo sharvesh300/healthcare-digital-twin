@@ -1,6 +1,6 @@
 """GRU and LSTM forecasters, tuned for Apple silicon (MPS).
 
-One global model per architecture predicts the glucose change at 15, 30 and 60 minutes
+One global model per architecture predicts the glucose change at every horizon
 together, from a 3-hour window of 5-minute steps plus the patient's static factors. The
 loss is masked, so an origin still trains the horizons whose targets it has.
 
@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn
 
@@ -29,6 +30,9 @@ from twin.ml.bench.data import HORIZONS, MACROS, STATIC, Origins, Patient
 
 LOOKBACK = 36  # 3 hours
 STEP_FEATURES = ("glucose_in", "hr", "active_kcal", *MACROS, "tod_sin", "tod_cos")
+STEP_INPUTS = (*STEP_FEATURES, "hr_missing", "kcal_missing")  # the model's per-step input order
+SCALED = ("glucose_in", "hr", "active_kcal")  # z-scored with the train segment's mean and SD
+MACRO_SCALE = 3.0  # meal macros enter as log1p(x) / 3
 DELTA_SCALE = 30.0  # mg/dL; targets are glucose changes divided by this
 
 
@@ -54,13 +58,11 @@ def pick_device(name: str, cell: str) -> torch.device:
 
 
 class Forecaster(nn.Module):
-    def __init__(self, cell: str, n_step: int, n_static: int, cfg: Config):
+    def __init__(self, cell: str, n_step: int, n_static: int, cfg: Config, n_out: int = len(HORIZONS)):
         super().__init__()
         rnn = {"gru": nn.GRU, "lstm": nn.LSTM}[cell]
         self.rnn = rnn(n_step, cfg.hidden, cfg.layers, batch_first=True, dropout=cfg.dropout)
-        self.head = nn.Sequential(
-            nn.Linear(cfg.hidden + n_static, cfg.hidden), nn.GELU(), nn.Linear(cfg.hidden, len(HORIZONS))
-        )
+        self.head = nn.Sequential(nn.Linear(cfg.hidden + n_static, cfg.hidden), nn.GELU(), nn.Linear(cfg.hidden, n_out))
 
     def forward(self, x: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
         out, _ = self.rnn(x)
@@ -68,48 +70,78 @@ class Forecaster(nn.Module):
 
 
 @dataclass
+class Scaling:
+    """Input scaling fitted on the train segment; exported with the model (meta.json)."""
+
+    stats: dict[str, tuple[float, float]]  # SCALED column -> (mean, SD)
+    static_mean: list[float]
+    static_std: list[float]
+
+    @classmethod
+    def fit(cls, patients: list[Patient]) -> Scaling:
+        stats = {}
+        for col in SCALED:
+            v = np.concatenate([p.frame[col].to_numpy()[p.split == "train"] for p in patients])
+            stats[col] = (float(np.nanmean(v)), float(np.nanstd(v)))
+        static = np.array([[p.static[k] for k in STATIC] for p in patients], dtype=float)
+        return cls(stats, np.nanmean(static, axis=0).tolist(), np.nanstd(static, axis=0).tolist())
+
+
+def step_matrix(frame: pd.DataFrame, scaling: Scaling) -> np.ndarray:
+    """(rows, STEP_INPUTS) float32: z-scored glucose / HR / activity, log meal macros, time of
+    day, then the HR and activity missing flags. Missing values become 0 after scaling."""
+    cols = []
+    for col in STEP_FEATURES:
+        v = frame[col].to_numpy(dtype=float)
+        if col in scaling.stats:
+            mean, sd = scaling.stats[col]
+            v = (v - mean) / sd
+        elif col in MACROS:
+            v = np.log1p(v) / MACRO_SCALE
+        cols.append(v)
+    cols.append(np.isnan(frame["hr"].to_numpy(dtype=float)).astype(float))
+    cols.append(np.isnan(frame["active_kcal"].to_numpy(dtype=float)).astype(float))
+    return np.nan_to_num(np.stack(cols, axis=1)).astype(np.float32)
+
+
+def static_vector(static: dict[str, float], scaling: Scaling) -> np.ndarray:
+    v = np.array([static[k] for k in STATIC], dtype=float)
+    std = np.array(scaling.static_std)
+    z = (v - np.array(scaling.static_mean)) / np.where(std > 0, std, 1.0)  # a constant factor carries nothing
+    return np.nan_to_num(z).astype(np.float32)
+
+
+def window(frame: pd.DataFrame, idx: int, scaling: Scaling) -> np.ndarray:
+    """(LOOKBACK, STEP_INPUTS) inputs for the origin at row `idx`: rows idx-LOOKBACK+1 .. idx."""
+    if idx + 1 < LOOKBACK:
+        raise ValueError(f"origin row {idx} has less than {LOOKBACK} steps of history")
+    return step_matrix(frame.iloc[idx + 1 - LOOKBACK : idx + 1], scaling)
+
+
+@dataclass
 class Tensors:
     x: np.ndarray  # (n, LOOKBACK, n_step) float32
     s: np.ndarray  # (n, n_static)
-    y: np.ndarray  # (n, 3) scaled delta, 0 where missing
-    m: np.ndarray  # (n, 3) target mask
+    y: np.ndarray  # (n, n_horizons) scaled delta, 0 where missing
+    m: np.ndarray  # (n, n_horizons) target mask
+    scaling: Scaling
 
 
-def build_tensors(patients: list[Patient], o: Origins) -> Tensors:
-    """Per-step inputs: z-scored glucose / HR / activity (+ missing flags), log meal macros, time of day."""
-    train_rows = {p.pid: p.split == "train" for p in patients}
-    stats = {}
-    for col in ("glucose_in", "hr", "active_kcal"):
-        v = np.concatenate([p.frame[col].to_numpy()[train_rows[p.pid]] for p in patients])
-        stats[col] = (np.nanmean(v), np.nanstd(v))
-    static = np.array([[p.static[k] for k in STATIC] for p in patients], dtype=float)
-    s_mean, s_std = np.nanmean(static, axis=0), np.nanstd(static, axis=0)
-
-    n_step = len(STEP_FEATURES) + 2  # + HR and activity missing flags
-    x = np.empty((len(o.pid), LOOKBACK, n_step), np.float32)
+def build_tensors(patients: list[Patient], o: Origins, scaling: Scaling | None = None) -> Tensors:
+    """Every origin's window, built with the same step_matrix the serving path uses."""
+    scaling = scaling or Scaling.fit(patients)
+    x = np.empty((len(o.pid), LOOKBACK, len(STEP_INPUTS)), np.float32)
     s = np.empty((len(o.pid), len(STATIC)), np.float32)
-    for k, p in enumerate(patients):
+    for p in patients:
         rows = np.flatnonzero(o.pid == p.pid)
         if not len(rows):
             continue
-        f = p.frame
-        cols = []
-        for col in STEP_FEATURES:
-            v = f[col].to_numpy(dtype=float)
-            if col in stats:
-                v = (v - stats[col][0]) / stats[col][1]
-            elif col in MACROS:
-                v = np.log1p(v) / 3.0
-            cols.append(v)
-        cols.append(np.isnan(f["hr"].to_numpy()).astype(float))
-        cols.append(np.isnan(f["active_kcal"].to_numpy()).astype(float))
-        steps = np.nan_to_num(np.stack(cols, axis=1)).astype(np.float32)
-        windows = np.lib.stride_tricks.sliding_window_view(steps, LOOKBACK, axis=0)  # (n-L+1, F, L)
+        windows = np.lib.stride_tricks.sliding_window_view(step_matrix(p.frame, scaling), LOOKBACK, axis=0)
         x[rows] = windows[o.idx[rows] - LOOKBACK + 1].transpose(0, 2, 1)
-        s[rows] = np.nan_to_num((static[k] - s_mean) / s_std)
+        s[rows] = static_vector(p.static, scaling)
     delta = (o.target - o.glucose_now[:, None]) / DELTA_SCALE
     m = ~np.isnan(delta)
-    return Tensors(x, s, np.nan_to_num(delta).astype(np.float32), m.astype(np.float32))
+    return Tensors(x, s, np.nan_to_num(delta).astype(np.float32), m.astype(np.float32), scaling)
 
 
 def _predict(model: nn.Module, x: torch.Tensor, s: torch.Tensor, batch: int) -> torch.Tensor:
@@ -168,6 +200,7 @@ def train(
         fit_s,
         {"seed": seed, "epochs": epochs, "valid_rmse": best, "predict_s": predict_s,
          "params": sum(p.numel() for p in model.parameters())},
+        state={k: v.detach().cpu() for k, v in best_state.items()},
     )
 
 

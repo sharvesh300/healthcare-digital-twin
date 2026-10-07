@@ -22,6 +22,7 @@ twin = "twin.cli:app"
 
 [project.optional-dependencies]
 ml = [
+    "safetensors>=0.8.0",
     "statsmodels>=0.15",
     "torch>=2.13",
 ]

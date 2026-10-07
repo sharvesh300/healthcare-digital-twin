@@ -1,4 +1,4 @@
-"""`load-sensors` step: devices and raw CGM/wearable readings into TimescaleDB (twin time)."""
+"""`load-sensors` step: devices, raw CGM/wearable readings and logged meals into TimescaleDB (twin time)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from twin.models import (
     Device,
     DeviceModel,
     GlucoseReading,
+    Meal,
     Patient,
     WearableMetric,
     WearableSample,
@@ -34,6 +35,7 @@ CGM_MODELS = {"Dexcom GL": DEXCOM, "Libre GL": LIBRE}
 CONTINUOUS_AGGREGATES = ("ts.glucose_daily", "ts.wearable_daily")
 # CGMacros Fitbit column (after parsing) -> ref.wearable_metric code
 FITBIT_METRICS = {"heart_rate": "heart_rate", "mets": "mets", "activity_level": "activity_level", "active_kcal": "active_kcal"}
+MEAL_COLUMNS = ("patient_id", "time", "meal_type", "energy_kcal", "carbs_g", "protein_g", "fat_g", "fiber_g")
 
 
 def _none(value):
@@ -74,6 +76,7 @@ async def _load_patient(session, cfg: Settings, patient_id: uuid.UUID, subject_i
     # Idempotent reload: replace this patient's rows wholesale.
     await session.execute(delete(GlucoseReading).where(GlucoseReading.device_id.in_(device_ids)))
     await session.execute(delete(WearableSample).where(WearableSample.device_id.in_(device_ids)))
+    await session.execute(delete(Meal).where(Meal.patient_id == patient_id))
 
     glucose: list[tuple] = []
     for column, model in CGM_MODELS.items():
@@ -101,6 +104,14 @@ async def _load_patient(session, cfg: Settings, patient_id: uuid.UUID, subject_i
         samples += [(devices[FITBIT], metric_id, t.to_pydatetime(), _dec(v, 3)) for t, v in values.items()]
     stats["fitbit_samples"] = await copy_records(
         session, WearableSample, ("device_id", "metric_id", "time", "value"), samples)
+
+    # Meals: the food log at the logged (photo) time. Amount Consumed is not stored (see ts.meal).
+    meals = streams.meals
+    times = cgmacros.shift(meals.index, offset_days, tz)
+    stats["meals"] = await copy_records(session, Meal, MEAL_COLUMNS, [
+        (patient_id, t.to_pydatetime(), m.meal_type, *(_dec(getattr(m, c), 1) for c in MEAL_COLUMNS[3:]))
+        for t, m in zip(times, meals.itertuples()) if pd.notna(t)
+    ])
     stats["ignored_columns"] = ",".join(streams.ignored_columns)
     return stats
 

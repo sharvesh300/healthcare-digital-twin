@@ -36,6 +36,7 @@ from twin.models import (
     DrugClass,
     GlucoseFused,
     GlucoseReading,
+    Meal,
     Medication,
     MedicationAtc,
     MedicationProduct,
@@ -47,7 +48,7 @@ from twin.models import (
 )
 
 SCHEMAS = ("ref", "core", "ts", "report", "ml")
-HYPERTABLES = (GlucoseReading, WearableSample, GlucoseFused, TwinStateTransition)
+HYPERTABLES = (GlucoseReading, WearableSample, Meal, GlucoseFused, TwinStateTransition)
 
 # Columns added after a table was first created (create_all never alters existing tables).
 ADDED_COLUMNS = (
@@ -175,7 +176,7 @@ async def init_db(log=print) -> None:
                 {"s": model.__table__.schema, "n": model.__table__.name},
             )
             if not compressed:
-                # Segment compressed chunks by the series key (device[, metric] for raw, patient for fused).
+                # Segment compressed chunks by the series key (device[, metric] for raw, patient for fused and meals).
                 segment = ", ".join(c.name for c in model.__table__.primary_key if c.name != "time")
                 await conn.exec_driver_sql(
                     f"ALTER TABLE {name} SET (timescaledb.compress, timescaledb.compress_segmentby = '{segment}')"

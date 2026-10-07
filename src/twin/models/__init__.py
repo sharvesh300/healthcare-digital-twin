@@ -6,8 +6,8 @@ One module per database schema:
                      drug classes, RxNorm medications, wearable metrics, device models)
   patient    core.*  patient master record and patient-owned data (tags, observations,
                      conditions, medications, encounters, devices, CGM calibration)
-  sensors    ts.*    raw CGM readings, wearable samples, the fused CGM stream and live-twin
-                     state transitions (hypertables)
+  sensors    ts.*    raw CGM readings, wearable samples, logged meals, the fused CGM stream and
+                     live-twin state transitions (hypertables)
   views      report.* views and ts.* continuous aggregates, read-only (own MetaData)
 
 Conventions
@@ -27,6 +27,7 @@ from twin.models.base import (
     EncounterClass,
     FusionSource,
     LagKind,
+    MealType,
     ObservationCategory,
     Sex,
     SleepStage,
@@ -60,6 +61,7 @@ from twin.models.reference import (
 from twin.models.sensors import (
     GlucoseFused,
     GlucoseReading,
+    Meal,
     SleepSegment,
     TwinStateTransition,
     WearableSample,
@@ -68,7 +70,7 @@ from twin.models.sensors import (
 __all__ = [
     "AccessTier", "Base", "CgmCalibration", "Concept", "Condition", "ConditionGroup", "DataSource", "Device",
     "DeviceKind", "DeviceModel", "DrugClass", "Encounter", "EncounterClass", "FusionSource", "GlucoseFused",
-    "GlucoseReading", "LagKind", "Medication", "MedicationAtc", "MedicationDose", "MedicationProduct",
+    "GlucoseReading", "LagKind", "Meal", "MealType", "Medication", "MedicationAtc", "MedicationDose", "MedicationProduct",
     "MedicationRegimen", "Observation", "ObservationCategory", "ObservationCode", "Patient", "PatientTag", "Sex",
     "SleepSegment", "SleepStage", "Tag", "TwinSignal", "TwinStateTransition", "ValueType", "WearableMetric",
     "WearableSample",

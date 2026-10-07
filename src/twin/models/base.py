@@ -85,6 +85,13 @@ class FusionSource(enum.StrEnum):
     secondary_only = "secondary_only"
 
 
+class MealType(enum.StrEnum):
+    breakfast = "breakfast"
+    lunch = "lunch"
+    dinner = "dinner"
+    snack = "snack"
+
+
 class TwinSignal(enum.StrEnum):
     """A live-twin signal whose status can change (ts.twin_state_transition)."""
 

@@ -337,7 +337,23 @@ The secondary columns are either all null or all set.
 | `stress` | {score} 0–99 | **S** every 3 min awake | **S** | – |
 | `hrv_rmssd` (nightly) | ms | **S** one value per night | – (D: real, from `ibi_ms`) | – |
 
-### 3.4 Sleep: `ts.sleep_segment`
+### 3.4 Meals: `ts.meal` (hypertable)
+
+One row per logged meal, keyed by patient: the food log is self-reported, not a device.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `patient_id` | uuid → `core.patient` | |
+| `time` | timestamptz | When the meal was logged (the photo's time) |
+| `meal_type` | enum | `breakfast`, `lunch`, `dinner` or `snack` |
+| `energy_kcal` | numeric | Whole meal, as logged |
+| `carbs_g`, `protein_g`, `fat_g`, `fiber_g` | numeric | Whole meal, as logged; ≥ 0 |
+
+Meals are **R** for the 14 CGMacros twins (455 meals); BIG IDEAs and NHANES have no meal log.
+Values are stored as logged, outliers included (for example, one entry has 2,830 g of fiber).
+CGMacros' `Amount Consumed` is not stored: it mixes 0–4 codes with percentages.
+
+### 3.5 Sleep: `ts.sleep_segment`
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -347,7 +363,7 @@ The secondary columns are either all null or all set.
 
 Sleep segments are **S** for all 30 composite twins (6,310 segments). No source cohort recorded sleep.
 
-### 3.5 Live twin: `ts.twin_state_transition` (hypertable)
+### 3.6 Live twin: `ts.twin_state_transition` (hypertable)
 
 A status change the live twin published (twin.streaming). The readings that caused it are in the
 tables above.
@@ -361,7 +377,7 @@ tables above.
 | `value` | numeric | The signal's value at the change |
 | `state_version` | bigint | The twin state version that published it (restarts when the API restarts) |
 
-### 3.6 Continuous aggregates (`ts.*`, real-time)
+### 3.7 Continuous aggregates (`ts.*`, real-time)
 
 | Aggregate | Columns |
 |---|---|

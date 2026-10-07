@@ -1,7 +1,8 @@
 """Schema `ts`: sensor streams (TimescaleDB hypertables, see twin.db.schema.init_db).
 
 Raw readings are keyed by device (the device knows its patient). The fused CGM
-stream combines a patient's devices, so it is keyed by patient.
+stream combines a patient's devices, and the meal log is self-reported, so both are
+keyed by patient.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from decimal import Decimal
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Numeric, SmallInteger, false
 from sqlalchemy.orm import Mapped, mapped_column
 
-from twin.models.base import TIMESTAMPTZ, Base, FusionSource, SleepStage, TwinSignal, pg_enum
+from twin.models.base import TIMESTAMPTZ, Base, FusionSource, MealType, SleepStage, TwinSignal, pg_enum
 from twin.models.patient import Device, Patient
 from twin.models.reference import WearableMetric
 
@@ -67,6 +68,30 @@ class GlucoseFused(Base):
     glucose_mg_dl: Mapped[Decimal] = mapped_column(Numeric(5, 1))
     source: Mapped[FusionSource] = mapped_column(pg_enum(FusionSource, "fusion_source"))
     censored: Mapped[bool] = mapped_column(server_default=false())
+
+
+class Meal(Base):
+    """A meal as the participant logged it (CGMacros food log, real), at the photo's time.
+
+    Keyed by patient, not device: the log is self-reported. Macros are the log's values for
+    the whole meal, as recorded. CGMacros' `Amount Consumed` is not stored, because it mixes
+    0-4 codes with percentages.
+    """
+
+    __tablename__ = "meal"
+    __table_args__ = (
+        *(CheckConstraint(f"{c} >= 0", name=c) for c in ("energy_kcal", "carbs_g", "protein_g", "fat_g", "fiber_g")),
+        {"schema": "ts"},
+    )
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Patient.patient_id, ondelete="CASCADE"), primary_key=True)
+    time: Mapped[datetime] = mapped_column(TIMESTAMPTZ, primary_key=True)
+    meal_type: Mapped[MealType] = mapped_column(pg_enum(MealType, "meal_type"))
+    energy_kcal: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
+    carbs_g: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
+    protein_g: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
+    fat_g: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
+    fiber_g: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
 
 
 class SleepSegment(Base):

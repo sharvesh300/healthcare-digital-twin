@@ -123,7 +123,7 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `load-ehr` | First prunes Synthea patients in FHIR that are no longer linked in `core.patient`: each patient's `$everything` compartment is deleted in one transaction, and shared Organization, Practitioner and Location resources are kept. Then loads hospital and practitioner bundles, followed by the **matched** patients' bundles. Requests are rewritten from `POST` to `PUT Type/<synthea-uuid>`, so FHIR ids equal Synthea ids. |
 | `copy-ehr` | Copies the composite twins' Synthea history into the twin DB, tagged `source = synthea` (synthetic): observations (labs, BP, coded answers; only LOINC codes in `ref.observation_code`, with units checked), conditions, medication regimens (RxNorm products mapped to ingredients and ATC drug classes), and encounters. HAPI stays the FHIR system of record. |
 | `ingest-nhanes` | NHANES 2011–2014 adults with diabetes (see [NHANES](#nhanes-20112014)): patients, labs, BP, body measures, smoking status, self-reported conditions, prescriptions (RxNorm), and minute-level wrist steps with daily wear minutes. Writes `data/reports/nhanes_report.csv`. |
-| `load-sensors` | Devices, plus native CGM, fingerstick and Fitbit readings (one row per minute and metric in `ts.wearable_sample`), are COPYed into the hypertables. Everything is shifted so the 10-day window starts the day after the patient's last encounter. |
+| `load-sensors` | Devices, plus native CGM, fingerstick and Fitbit readings (one row per minute and metric in `ts.wearable_sample`) and the logged meals (`ts.meal`), are COPYed into the hypertables. Everything is shifted so the 10-day window starts the day after the patient's last encounter. |
 | `fuse-cgm` | Fuses each patient's Dexcom and Libre into one 5-min stream, `ts.glucose_fused`. The steps are time alignment, cross-calibration and weighted combination (see [CGM fusion](#cgm-fusion)). Fitted parameters go to `core.cgm_calibration`. Writes `data/reports/cgm_fusion_report.csv`. |
 | `simulate-wearables` | **Synthetic.** Sleep stages, SpO₂, respiration, stress and nightly HRV for every composite twin (see [Synthetic wearables](#3-synthetic-wearables)), under a generator device flagged `is_synthetic`; tags the patient `synthetic-sensors`. |
 | `reconcile` | Recomputes the GMI tags. Writes the Patient's tags and race/ethnicity, then the real labs (and BMI and LDL derived from them) as the newest Observations, tagged `composite-override`. Writes `data/reports/consistency_report.csv` (HbA1c vs GMI). |
@@ -154,6 +154,7 @@ ref.data_source 1──* core.patient 1──* core.patient_tag *──1 ref.tag
                          ├──* ts.glucose_fused      (hypertable, derived: fused CGM, 5 min)
                          └──* core.device *──1 ref.device_model
                                   │ 1
+                         ├──* ts.meal               (hypertable: logged meals and macros)
                                   ├──* ts.glucose_reading   (hypertable, raw)
                                   ├──* ts.wearable_sample   (hypertable) *──1 ref.wearable_metric
                                   └──* ts.sleep_segment     (stage intervals)

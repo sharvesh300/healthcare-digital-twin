@@ -53,6 +53,7 @@ scripts/pipeline.sh                       # uv run twin all: init-db + every loa
 uv run twin export-features               # ML feature store -> data/features/*.parquet
 uv run twin train-baselines               # glucose forecaster + HbA1c population model -> data/models/
 uv sync --extra ml && uv run twin bench-glucose   # forecaster benchmark on real CGMacros -> data/benchmarks/
+uv run twin train-glucose-forecaster      # GRU forecaster for the Predict tab -> data/models/glucose_forecast/
 scripts/replay.sh                         # twin API on http://localhost:8765 (docs at /docs)
 scripts/stream.sh --from-now              # (second terminal) simulated devices stream into the live twin
 ```
@@ -130,8 +131,9 @@ on the next `twin all`. `load-ehr` then removes the patients that are no longer 
 | `summarize` | Writes Device resources, daily CGM Observations (mean 97507-8, time-in-ranges panel 106793-3, CV 104638-2), whole-window GMI 97506-0 and daily mean heart rate 8867-4, and daily steps 55423-8 where a wearable records them. Codes follow the [HL7 CGM IG](https://build.fhir.org/ig/HL7/cgm/). |
 | `export-features` | Writes the `ml` feature store to `data/features/*.parquet` with `DATASET_CARD.md` (see [ML and simulation](#ml-and-simulation)). |
 | `train-baselines` | Trains the glucose forecaster and the NHANES HbA1c model from the exported features, into `data/models/`. |
-| `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. The live twin: `GET /patients/{id}`, `WS /ws/patients/{id}/state`, `POST /ingest/events` (see [Live twin](#live-twin)). One worker. |
+| `serve` | FastAPI twin API: `GET /patients?tag=…`, `GET /twin/{id}`, `GET /twin/{id}/timeline`, `POST /twin/{id}/simulate/glucose`, `POST /twin/{id}/simulate/hba1c`, and `WS /ws/patients/{id}?speed=60&kinds=glucose_fused,glucose,activity,medication`. The live twin: `GET /patients/{id}`, `WS /ws/patients/{id}/state`, `POST /ingest/events` (see [Live twin](#live-twin)). The glucose forecast: `GET /patients/{id}/predictions/glucose[?at=]` (see [Glucose forecasting benchmark](#glucose-forecasting-benchmark)). One worker. |
 | `bench-glucose` | Not a pipeline step. Benchmarks persistence, linear, ARIMA, SARIMA, GRU and LSTM glucose forecasts at +15/30/60 min on the raw CGMacros files, into `data/benchmarks/<run-id>/` (see [Glucose forecasting benchmark](#glucose-forecasting-benchmark)). Needs `uv sync --extra ml`. |
+| `train-glucose-forecaster` | Not a pipeline step. Trains the GRU glucose forecaster (+15/30/45/60 min, 3-seed ensemble) on the raw CGMacros files and exports it to `data/models/glucose_forecast/` as safetensors weights plus `meta.json` (see [Glucose forecasting benchmark](#glucose-forecasting-benchmark)). Needs `uv sync --extra ml`. |
 | `simulate-stream` | Not a pipeline step. Acts as the patients' devices: replays recorded CGM, wearable and sleep data as live readings into the running API (see [Live twin](#live-twin)). |
 | `stream-reset` | Deletes the live-simulator devices with their readings, and the recorded twin transitions. |
 
@@ -152,9 +154,9 @@ ref.data_source 1──* core.patient 1──* core.patient_tag *──1 ref.tag
                          ├──* core.encounter
                          ├──1 core.cgm_calibration *──2 ref.device_model (reference, secondary)
                          ├──* ts.glucose_fused      (hypertable, derived: fused CGM, 5 min)
+                         ├──* ts.meal               (hypertable: logged meals and macros)
                          └──* core.device *──1 ref.device_model
                                   │ 1
-                         ├──* ts.meal               (hypertable: logged meals and macros)
                                   ├──* ts.glucose_reading   (hypertable, raw)
                                   ├──* ts.wearable_sample   (hypertable) *──1 ref.wearable_metric
                                   └──* ts.sleep_segment     (stage intervals)
@@ -445,6 +447,47 @@ Test RMSE in mg/dL; skill is 1 − RMSE / RMSE(persistence):
 
 The daily seasonal term adds almost nothing: its median coefficient is 0.02, so SARIMA ≈ ARIMA. On Apple silicon, the GRU trains on MPS, while the LSTM trains on the CPU in a parallel process. The MPS LSTM kernel in torch 2.13 leaks driver memory, so the LSTM is kept off MPS. SARIMA's 291-dimensional Kalman filter dominates the run time, at about 40 min for 45 participants on an M4. Its matrix work runs on each core cluster's shared matrix coprocessor, so adding processes speeds it up only a little.
 
+**The exported forecaster.** `twin train-glucose-forecaster` trains the GRU with the benchmark's protocol and four horizons, and averages 3 seeds. It writes one directory per run:
+
+```
+data/models/glucose_forecast/
+  CURRENT                     the run the API loads (edit it to roll back)
+  gru-<date>-<git sha>/
+    weights.safetensors       every seed's weights (plain tensors, no pickle)
+    meta.json                 model card and preprocessing contract
+```
+
+`meta.json` records:
+- the architecture;
+- the input features in order, with their scaling;
+- the lookback and gap bridging;
+- the horizons;
+- the 80 % prediction band;
+- training provenance;
+- held-out test metrics;
+- the checksum of the weights.
+
+Loading refuses a bundle whose format, checksum or feature contract differs from the code. Training and serving build their inputs with the same functions (`bench/data.build_frame`, `bench/neural.window`).
+
+Test metrics of the current export (mg/dL):
+
+| | +15 min | +30 min | +45 min | +60 min |
+|---|---|---|---|---|
+| GRU RMSE | 10.0 | 15.7 | 19.4 | 22.1 |
+| Persistence RMSE | 12.0 | 19.3 | 24.2 | 27.9 |
+| 80 % band coverage | 84 % | 84 % | 84 % | 84 % |
+
+**Serving it.** `GET /patients/{id}/predictions/glucose[?at=]` (`twin.api.prediction`, built on `twin.prediction`) forecasts from the latest CGM reading, or from any earlier twin time `at`. A past `at` also returns the readings that followed, as `actual`.
+- **Inputs:** the twin's own real inputs: native Dexcom readings, Fitbit heart rate and activity calories, the meals in `ts.meal`, and the participant's real age and labs.
+- **Models:**
+  - CGMacros twins get the exported GRU.
+  - Twins without a meal log or Fitbit (BIG IDEAs) get a glucose-only ARIMA(3,1,2), fitted per request on the twin's last 3 days.
+- **Response:** the four horizons, each with its 80 % range, change and band. Warnings flag a spike (a rise of at least 50 mg/dL, or at least 2 mg/dL/min) and a forecast above 180 or 250, or below 70 or 54. It also lists the inputs the model saw.
+- **Errors:**
+  - A twin whose data can't support a forecast (stale CGM, a gap of more than 30 min in the last 3 h) gets `unavailable.reason`.
+  - A missing or mismatched bundle gets 503.
+- **Speed:** about 140 ms warm (GRU) and about 0.6 s for ARIMA. The first GRU request also loads torch and the bundle (about 1.4 s).
+
 ## Live twin
 
 The twin also runs live. A simulated device streams readings, the API stores them, and each
@@ -548,8 +591,18 @@ Every row opens a detail page:
 - everything recorded at a visit.
 
 Each entry links to the visit it was recorded at and to related entries. Synthetic values are
-flagged throughout. **Predict** is reserved for the forecast and what-if modules. The old
-History tab now redirects to Record, since the Live tab's replay covers the recorded days.
+flagged throughout. The old History tab now redirects to Record, since the Live tab's replay
+covers the recorded days.
+
+**Predict** shows the glucose forecast (`GET /patients/{id}/predictions/glucose`), from top to bottom:
+- **Origin:** the latest reading, with its band and trend. A date-time picker sets an earlier moment (`?at=`). One button does whatever applies: **Show forecast** for a newly picked time, **Refresh** on the latest view, or **Back to latest**. The latest view also refreshes itself every 5 minutes, the CGM interval.
+- **Chart:** 3 h of measured glucose (90 min on phones), a "Now" rule, and the future region tinted. In it, the forecast is dashed over its hatched 80 % range, with points coloured by band. For a past origin, the readings that actually followed are dotted. Model output is never drawn like a measurement.
+- **Warning banner:** the most severe warning (spike, above 180 or 250, below 70 or 54), with the others listed.
+- **Horizon cards:** +15, +30, +45 and +60 min. Each shows the value, band, change from now, 80 % range and typical error. A card with a warning gets a coloured edge.
+- **Meals & activity:** the meals logged in the last 4 h, and whether heart rate and activity were recorded. BIG IDEAs twins have neither and are forecast from glucose alone, with ARIMA.
+- **Accuracy:** test RMSE and range coverage per horizon.
+
+Without an exported model, the tab shows the command to create it.
 
 On the Live tab, **Replay** switches the same view to a recorded window. Pick a preset or a
 From / To time, press play, then scrub or change the speed (30–600×).

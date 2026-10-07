@@ -385,3 +385,70 @@ export interface VisitDetail {
   previous: VisitSummary | null;
   next: VisitSummary | null;
 }
+
+// ── glucose forecast (GET /patients/{id}/predictions/glucose, src/twin/prediction/assemble.py) ──
+
+export type ForecastWarningKind = "very_high" | "high" | "low" | "very_low" | "spike" | "possible_high" | "possible_low";
+export type ForecastSeverity = "danger" | "warning" | "info";
+
+export interface ForecastWarning {
+  kind: ForecastWarningKind;
+  severity: ForecastSeverity;
+  horizon_min: number;
+  glucose: number;
+  message: string;
+}
+
+export interface ForecastPoint {
+  horizon_min: number;
+  time: string;
+  glucose: number;
+  low: number;
+  high: number;
+  change: number;
+  band: string;
+  warnings: ForecastWarningKind[];
+}
+
+export interface ForecastModel {
+  name: "gru" | "arima";
+  label: string;
+  version: string;
+  trained_on: string;
+  horizons: number[];
+  band_level: number;
+  /** held-out test RMSE per horizon (mg/dL); null where it wasn't measured */
+  test_rmse: Record<string, number | null>;
+  band_coverage: Record<string, number> | null;
+}
+
+export interface ForecastMeal {
+  time: string;
+  meal_type: string;
+  energy_kcal: number | null;
+  carbs_g: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  fiber_g: number | null;
+}
+
+export interface GlucoseForecast {
+  patient_id: string;
+  at: string;
+  model: ForecastModel | null;
+  origin: { time: string; glucose: number; band: string; trend: GlucoseTrend | null; trend_mg_dl_min: number | null } | null;
+  history: { t: string; v: number }[];
+  forecast: ForecastPoint[];
+  /** readings after the origin: what actually happened (a past `at` only) */
+  actual: { t: string; v: number }[];
+  warnings: ForecastWarning[];
+  inputs: {
+    glucose_only: boolean;
+    meals: ForecastMeal[];
+    heart_rate: boolean;
+    activity: boolean;
+    missing: string[];
+  } | null;
+  unavailable: { reason: string } | null;
+  caveat: string;
+}

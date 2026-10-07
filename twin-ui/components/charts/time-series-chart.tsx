@@ -2,8 +2,9 @@
 
 import { ArrowUpRight, Crosshair, Table2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { niceTicks, useWidth } from "@/components/charts/scale";
 import { BandChip } from "@/components/vitals/chips";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
@@ -13,28 +14,6 @@ import { glucoseBand } from "@/lib/tokens";
 
 const RANGES = [3, 6, 24] as const;
 type Range = (typeof RANGES)[number];
-
-function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width] as const;
-}
-
-function niceTicks(lo: number, hi: number, count = 4): number[] {
-  const raw = (hi - lo) / count;
-  const mag = 10 ** Math.floor(Math.log10(raw || 1));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? mag * 10;
-  const out = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
-  return out;
-}
 
 export interface SeriesSpec {
   points: Point[];

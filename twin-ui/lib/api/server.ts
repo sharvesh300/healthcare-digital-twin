@@ -6,6 +6,7 @@ import { cache } from "react";
 import type {
   ConditionDetail,
   ConditionsList,
+  GlucoseForecast,
   MeasureDetail,
   MedicationDetail,
   MedicationsList,
@@ -25,6 +26,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** the API's own explanation (FastAPI `detail`), when it sent one */
+    readonly detail?: string,
   ) {
     super(message);
   }
@@ -51,7 +54,11 @@ async function get<T>(path: string): Promise<T> {
   } catch {
     throw new ApiError(503, `Can't reach the twin API at ${TWIN_API_URL}. Start it with \`uv run twin serve\`.`);
   }
-  if (!res.ok) throw new ApiError(res.status, `${res.status} from ${path}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+    const detail = typeof body?.detail === "string" ? body.detail : undefined;
+    throw new ApiError(res.status, `${res.status} from ${path}`, detail);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -78,5 +85,9 @@ export const api = {
     visits: (id: string, q?: { year?: number; class?: string; limit?: number; cursor?: string }) =>
       get<VisitsPage>(`/patients/${id}/record/visits${qs(q)}`),
     visit: (id: string, encounterId: string) => get<VisitDetail>(`/patients/${id}/record/visits/${encodeURIComponent(encounterId)}`),
+  },
+  // model forecasts (src/twin/api/prediction.py)
+  predictions: {
+    glucose: (id: string, at?: string | null) => get<GlucoseForecast>(`/patients/${id}/predictions/glucose${qs({ at })}`),
   },
 };

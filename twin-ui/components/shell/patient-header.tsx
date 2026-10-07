@@ -27,7 +27,7 @@ export function PatientHeader({ patient }: { patient: PatientInfo }) {
   const tabs = [
     { href: base, label: "Live", icon: Radio },
     { href: `${base}/record`, label: "Record", icon: FileText },
-    { href: `${base}/predict`, label: "Predict", icon: Sparkles, soon: true },
+    { href: `${base}/predict`, label: "Predict", icon: Sparkles },
   ];
 
   return (
@@ -54,7 +54,7 @@ export function PatientHeader({ patient }: { patient: PatientInfo }) {
       </div>
 
       <nav aria-label="Twin views" className="-mb-px mt-5 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {tabs.map(({ href, label, icon: Icon, soon }) => {
+        {tabs.map(({ href, label, icon: Icon }) => {
           const active = href === base ? pathname === base : pathname.startsWith(href);
           return (
             <Link
@@ -68,7 +68,6 @@ export function PatientHeader({ patient }: { patient: PatientInfo }) {
             >
               <Icon size={15} className={active ? "text-primary" : undefined} />
               {label}
-              {soon && <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-3">soon</span>}
               {active && (
                 <motion.span layoutId="patient-tab" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary"
                   transition={{ type: "spring", stiffness: 480, damping: 38 }} />

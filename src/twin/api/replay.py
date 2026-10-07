@@ -6,6 +6,7 @@
     /patients/{patient_id}, /ws/patients/{patient_id}/state, /ingest/events
                                             -> the live twin, see twin.api.patients / twin.api.ingest
     /patients/{patient_id}/record/...       -> the patient record, see twin.api.record
+    /patients/{patient_id}/predictions/...  -> model forecasts, see twin.api.prediction
     /twin/...                               -> see twin.api.twin_view
 
 The live twin keeps state in this process: run a single worker.
@@ -23,6 +24,7 @@ from sqlalchemy import select, text
 
 from twin.api.ingest import router as ingest_router
 from twin.api.patients import router as patients_router
+from twin.api.prediction import router as prediction_router
 from twin.api.record import router as record_router
 from twin.api.twin_view import router as twin_router
 from twin.config import settings
@@ -55,6 +57,7 @@ app.include_router(twin_router)
 app.include_router(patients_router)
 app.include_router(ingest_router)
 app.include_router(record_router)
+app.include_router(prediction_router)
 
 
 @app.get("/health")
